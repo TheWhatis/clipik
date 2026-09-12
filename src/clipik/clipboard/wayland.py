@@ -36,7 +36,7 @@ async def _read_data(mime: str) -> bytes:
     return stdout
 
 
-async def _write_data(mime, str, data: bytes):
+async def _write_data(mime: str, data: bytes):
     try:
         proc = await asyncio.create_subprocess_exec(
             'wl-copy', '--type', mime,

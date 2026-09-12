@@ -70,7 +70,7 @@ async def _ws_handler(websocket: ServerConnection, set_clipboard: SetClipboardFn
     except websockets.exceptions.ConnectionClosed:
         logger.info('Client disconnected: [{}]', peer)
     finally:
-        clients.remove(websocket)
+        _CLIENTS.remove(websocket)
 
 
 async def start_websocket_server(
