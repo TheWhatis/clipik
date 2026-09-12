@@ -4,7 +4,7 @@ title: CLIPIK
 
 [![Latest Stable](http://img.shields.io/pypi/v/clipik.svg)](https://pypi.org/project/clipik)
 [![Scrutinizer](http://img.shields.io/scrutinizer/g/TheWhatis/clipik.svg)](https://scrutinizer-ci.com/g/TheWhatis/clipik)
-[![License](http://img.shields.io/pypi/l/edges/clipik.svg?refresh=true)](https://pypi.org/project/clipik)
+[![License](http://img.shields.io/pypi/l/TheWhatis/clipik.svg?refresh=true)](https://pypi.org/project/clipik)
 
 CLIPIK - сервис для реализации общего буфера обмена по локальной сети
 
