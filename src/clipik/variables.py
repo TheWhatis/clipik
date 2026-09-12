@@ -9,15 +9,15 @@ GRAPHIC_PROTOCOL = 'x11'
 if os.getenv('WAYLAND_DISPLAY'):
     GRAPHIC_PROTOCOL = 'wayland'
 
-
 logger.info('GRAPHIC_PROTOCOL is [{}]', GRAPHIC_PROTOCOL)
 
 
-PEER_PORT = os.getenv('CLIPIK_PORT', default=8765)
-PEER_PORT = int(PEER_PORT)
-
-
+PEER_PORT = int(os.getenv('CLIPIK_PORT', default=8765))
 logger.info('PORT: [{}]', PEER_PORT)
+
+
+SIZE_LIMIT=int(os.getenv('CLIPIK_SIZE_LIMIT', default=64 * 1024 * 1024))
+logger.info('SIZE_LIMIT: [{}]', SIZE_LIMIT)
 
 
 REQUIRED_UTILS: list[str] = []

@@ -5,7 +5,7 @@ import websockets
 from typing import TypeAlias
 from websockets.asyncio.server import ServerConnection
 from clipik.logger import logger
-from clipik.variables import PROTOCOL, PEER_PORT
+from clipik.variables import PROTOCOL, PEER_PORT, SIZE_LIMIT
 from clipik.model import (
     ClipboardContent,
     HandshakeEvent,
@@ -81,7 +81,7 @@ async def start_websocket_server(
     async def handler(websocket: ServerConnection):
         await _ws_handler(websocket, set_clipboard, is_duplicate_clipboard)
 
-    async with websockets.serve(handler, '0.0.0.0', PEER_PORT):
+    async with websockets.serve(handler, '0.0.0.0', PEER_PORT, max_size=SIZE_LIMIT):
         logger.info('Websocket server started on [{}]', PEER_PORT)
         await asyncio.Future()
 

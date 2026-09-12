@@ -4,7 +4,7 @@ import base64
 from collections.abc import AsyncGenerator
 from clipik.model import ClipboardContent
 from clipik.logger import logger
-
+from clipik.variables import SIZE_LIMIT
 
 async def _get_types() -> list[str]:
     proc = await asyncio.create_subprocess_exec(
@@ -64,6 +64,7 @@ async def _process_watch() -> Process:
                 'wl-paste', '--watch', 'sh', '-c', 'base64 -w0; echo',
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
+                limit=SIZE_LIMIT,
             )
         except Exception as e:
             logger.error('wayland: failed to start wl-paste --watch: [{}]', e)
