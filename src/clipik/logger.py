@@ -33,3 +33,4 @@ logger.add(str(_filepath), level=_level, encoding='utf-8', rotation='10mb', comp
 logger.add(sys.stdout, level=_level, colorize=True)
 
 logger.info('ENV LOG_LEVEL: [{}]', _level)
+logger.info('Log file is [{}]', _filepath)
