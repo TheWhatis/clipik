@@ -54,11 +54,7 @@ async def _ws_handler(websocket: ServerConnection, set_clipboard: SetClipboardFn
         async for msg in websocket:
             try:
                 event = ClipboardEvent.model_validate_json(msg)
-
-                content = ClipboardContent(
-                    mime=payload.get('mime', default='text/plain'),
-                    data=payload.get('data', default=''),
-                )
+                content = ClipboardContent(mime=event.mime, data=event.data)
 
                 logger.debug('Setting clipboard from [{}]: [{}]', peer, content.mime)
                 if await is_duplicate_clipboard(content):
