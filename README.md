@@ -10,7 +10,7 @@ CLIPIK - сервис для реализации общего буфера об
 
 # Быстрый старт
 
-Тут должен быть установлен ~PATH=\${HOME}/.local/bin:\${PATH}
+Тут должен быть установлен `PATH=${HOME}/.local/bin:${PATH}`
 
 ``` bash
 uv tool install clipik
