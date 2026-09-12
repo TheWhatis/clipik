@@ -12,8 +12,10 @@
 CLIPIK - сервис для реализации общего буфера обмена по локальной сети
 
 * Быстрый старт
+  Тут должен быть установлен ~PATH=${HOME}/.local/bin:${PATH}
+
   #+begin_src bash
-    pip install clipik
+    uv tool install clipik
     clipik
   #+end_src
 
