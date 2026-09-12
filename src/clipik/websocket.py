@@ -29,7 +29,7 @@ async def _ws_handler(websocket: ServerConnection, set_clipboard: SetClipboardFn
         msg = await asyncio.wait_for(websocket.recv(), timeout=_HANDSHAKE_TIMEOUT)
 
         try:
-            event = HandshakeEvent.model_validate_json(raw)
+            event = HandshakeEvent.model_validate_json(msg)
         except Exception as e:
             logger.warning('Invalid handshake [{}]', msg)
             await websocket.close(code=1000, reason='Invalid handshake')
@@ -51,7 +51,7 @@ async def _ws_handler(websocket: ServerConnection, set_clipboard: SetClipboardFn
     try:
         async for msg in websocket:
             try:
-                event = ClipboardEvent.model_validate_json(raw)
+                event = ClipboardEvent.model_validate_json(msg)
 
                 content = ClipboardContent(
                     mime=payload.get('mime', default='text/plain'),
@@ -116,8 +116,8 @@ async def connect_to_server(host: str, port: int, set_clipboard: SetClipboardFn,
         async with websockets.connect(url) as ws:
             await ws.send(HandshakeEvent().model_dump_json())
 
-            raw = await asyncio.wait_for(ws.recv(), timeout=_HANDSHAKE_TIMEOUT)
-            ack = HandshakeAckEvent.model_validate_json(raw)
+            msg = await asyncio.wait_for(ws.recv(), timeout=_HANDSHAKE_TIMEOUT)
+            ack = HandshakeAckEvent.model_validate_json(msg)
 
             if ack.protocol != PROTOCOL:
                 logger.warning('Invalid protocol [{}] for [{}]', ack.protocol, host)
@@ -125,9 +125,9 @@ async def connect_to_server(host: str, port: int, set_clipboard: SetClipboardFn,
 
             logger.info('Connected to server [{}]', url)
 
-            async for raw in ws:
+            async for msg in ws:
                 try:
-                    event = ClipboardEvent.model_validate_json(raw)
+                    event = ClipboardEvent.model_validate_json(msg)
 
                     content = ClipboardContent(
                         mime=event.mime,
