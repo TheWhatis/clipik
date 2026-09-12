@@ -86,32 +86,36 @@ async def start_websocket_server(
 
 
 async def broadcast_local(listen_clipboard: ListenClipboardFn):
-    async for content in listen_clipboard():
-        if not content.data:
-            continue
+    broadcast_tasks: list[asyncio.Task] = []
 
-        event = ClipboardEvent(
-            mime=content.mime,
-            data=content.data if isinstance(content.data, str) else content.data,
-        )
+    try:
+        async for content in listen_clipboard():
+            if not content.data:
+                continue
 
-        payload = event.model_dump_json()
-
-        try:
-            if _CLIENTS:
-                await asyncio.gather(
-                    *[c.send(payload) for c in _CLIENTS],
-                    return_exceptions=True
-                )
-
-                logger.debug('Broadcasted to [{}] clients', len(_CLIENTS))
-        except Exception as e:
-            logger.error(
-                'Error [{}] broadcasting to [{}] clients, mime [{}]',
-                e,
-                len(_CLIENTS),
-                content.mime
+            event = ClipboardEvent(
+                mime=content.mime,
+                data=content.data if isinstance(content.data, str) else content.data,
             )
+
+            payload = event.model_dump_json()
+
+            try:
+                if _CLIENTS:
+                    for client in _CLIENTS:
+                        broadcast_tasks.append(asyncio.create_task(client.send(payload)))
+
+                    logger.debug('Broadcasted to [{}] clients', len(_CLIENTS))
+            except Exception as e:
+                logger.error(
+                    'Error [{}] broadcasting to [{}] clients, mime [{}]',
+                    e,
+                    len(_CLIENTS),
+                    content.mime
+                )
+    finally:
+        for task in broadcast_tasks:
+            task.close()
 
 
 async def connect_to_server(host: str, port: int, set_clipboard: SetClipboardFn, is_duplicate_clipboard: IsDuplicateClipboardFn):
