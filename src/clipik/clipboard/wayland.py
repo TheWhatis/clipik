@@ -17,8 +17,9 @@ async def _get_types() -> list[str]:
 
     if stderr:
         logger.warning('wayland: wl-paste --list-types stderr: [{}]', stderr.decode())
+        return []
 
-    return stdout.decode(errors='replace').split()
+    return stdout.decode().splitlines()
 
 
 async def _read_data(mime: str) -> bytes:
@@ -40,18 +41,18 @@ async def _write_data(mime: str, data: bytes):
     try:
         logger.debug('Executing wl-copy --type [{}]', mime)
         proc = await asyncio.create_subprocess_exec(
-            'wl-copy', '--type', mime,
+            'wl-copy', '--type', mime, '--paste-once',
             stdin=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
 
-        logger.debug('Awaiting communicate wl-copy --type [{}]', mime)
+        logger.debug('Awaiting communicate wl-copy --type [{}] --paste-once', mime)
         _, stderr = await proc.communicate(data)
 
         if stderr:
-            logger.warning('wayland: wl-copy --type {} stderr: [{}]', mime, stderr.decode())
+            logger.warning('wayland: wl-copy --type [{}] --paste-once stderr: [{}]', mime, stderr.decode())
         else:
-            logger.info('Successfully pasted [{}] to clipboard wl-copy --type [{}]', data, mime)
+            logger.info('Successfully pasted [{}] to clipboard wl-copy --type [{}] --paste-once', data, mime)
     except Exception as e:
         logger.error('wayland: failed to write data', e)
 
@@ -94,6 +95,10 @@ async def listen_clipboard() -> AsyncGenerator[ClipboardContent, None]:
 
         try:
             types: list[str] = await _get_types()
+
+            if not types:
+                logger.warning('wayland: types list is empty [{}]', types)
+                continue
         except Exception as e:
             logger.error('wayland: failed to get types [{}]', e)
             continue
@@ -146,6 +151,7 @@ async def is_duplicate_clipboard(content: ClipboardContent) -> bool:
         return False
 
     types: list[str] = await _get_types()
+
     if content.mime not in types:
         return False
 
