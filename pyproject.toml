@@ -1,9 +1,9 @@
 [project]
 name = "clipik"
 version = "0.1.0"
-description = "Synchronize clipboard buffer on linux (x11/wayland)"
+description = "Synchronize clipboard buffer by network"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
     "asyncio>=4.0.0",
     "loguru>=0.7.3",
@@ -23,4 +23,9 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "basedpyright>=1.40.0",
+    "twine>=7.0.0",
 ]
+
+[project.urls]
+Homepage = "https://gitflic.ru/project/kurilka/clipik"
+Github = "https://github.com/TheWhatis/clipik"

@@ -5,7 +5,7 @@ from clipik.variables import GRAPHIC_PROTOCOL
 from clipik.logger import logger
 from clipik.websocket import broadcast_local, connect_to_server, start_websocket_server
 from clipik.model import NewServiceEvent, LoseServiceEvent
-
+from clipik.exception import InitializationError
 
 if GRAPHIC_PROTOCOL == 'x11':
     from clipik.clipboard.x11 import set_clipboard, listen_clipboard, is_duplicate_clipboard
