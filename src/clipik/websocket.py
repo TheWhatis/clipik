@@ -1,4 +1,5 @@
 import os
+import json
 import asyncio
 from collections.abc import Callable, Awaitable, AsyncGenerator
 import websockets
@@ -106,7 +107,12 @@ async def broadcast_local(listen_clipboard: ListenClipboardFn):
 
                 logger.debug('Broadcasted to [{}] clients', len(_CLIENTS))
         except Exception as e:
-            logger.error('Error broadcasting to [{}] clients, mime [{}]', len(_CLIENTS), content.mime)
+            logger.error(
+                'Error [{}] broadcasting to [{}] clients, mime [{}]',
+                e,
+                len(_CLIENTS),
+                content.mime
+            )
 
 
 async def connect_to_server(host: str, port: int, set_clipboard: SetClipboardFn, is_duplicate_clipboard: IsDuplicateClipboardFn):
