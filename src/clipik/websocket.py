@@ -120,7 +120,7 @@ async def connect_to_server(host: str, port: int, set_clipboard: SetClipboardFn,
     url = f"ws://{host}:{port}"
 
     try:
-        async with websockets.connect(url) as ws:
+        async with websockets.connect(url, max_size=SIZE_LIMIT) as ws:
             await ws.send(HandshakeEvent().model_dump_json())
 
             msg = await asyncio.wait_for(ws.recv(), timeout=_HANDSHAKE_TIMEOUT)
