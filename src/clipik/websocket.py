@@ -21,7 +21,7 @@ IsDuplicateClipboardFn: TypeAlias = Callable[[ClipboardContent], Awaitable[bool]
 
 _HANDSHAKE_TIMEOUT = os.getenv('CLIPIK_HANDSHAKE_TIMEOUT', default=7)
 _HANDSHAKE_TIMEOUT = int(_HANDSHAKE_TIMEOUT)
-_CLIENTS = set()
+_CLIENTS: set[ServerConnection] = set()
 
 
 async def _ws_handler(websocket: ServerConnection, set_clipboard: SetClipboardFn, is_duplicate_clipboard: IsDuplicateClipboardFn):
@@ -48,6 +48,8 @@ async def _ws_handler(websocket: ServerConnection, set_clipboard: SetClipboardFn
     peer = websocket.remote_address[0]
     logger.info('Client connected: [{}]', peer)
 
+    set_clipboard_tasks: list[asyncio.Task] = []
+
     try:
         async for msg in websocket:
             try:
@@ -58,12 +60,12 @@ async def _ws_handler(websocket: ServerConnection, set_clipboard: SetClipboardFn
                     data=payload.get('data', default=''),
                 )
 
-                logger.debug('Seting clipboard from [{}]: [{}]', peer, content.mime)
+                logger.debug('Setting clipboard from [{}]: [{}]', peer, content.mime)
                 if await is_duplicate_clipboard(content):
                     logger.debug('Clipboard from [{}] is duplicate: [{}]', peer, content.mime)
                     continue
 
-                await set_clipboard(content)
+                set_clipboard_tasks.append(asyncio.create_task(set_clipboard(content)))
                 logger.debug('Set clipboard from [{}]: [{}]', peer, content.mime)
             except Exception as e:
                 logger.error('Error listen peer [{}]: [{}]', peer, e)
@@ -71,6 +73,9 @@ async def _ws_handler(websocket: ServerConnection, set_clipboard: SetClipboardFn
         logger.info('Client disconnected: [{}]', peer)
     finally:
         _CLIENTS.remove(websocket)
+
+        for task in set_clipboard_tasks:
+            task.cancel()
 
 
 async def start_websocket_server(
@@ -86,36 +91,33 @@ async def start_websocket_server(
 
 
 async def broadcast_local(listen_clipboard: ListenClipboardFn):
-    broadcast_tasks: list[asyncio.Task] = []
+    async for content in listen_clipboard():
+        if not content.data:
+            continue
 
-    try:
-        async for content in listen_clipboard():
-            if not content.data:
-                continue
+        event = ClipboardEvent(
+            mime=content.mime,
+            data=content.data if isinstance(content.data, str) else content.data,
+        )
 
-            event = ClipboardEvent(
-                mime=content.mime,
-                data=content.data if isinstance(content.data, str) else content.data,
+        payload = event.model_dump_json()
+
+        try:
+            if _CLIENTS:
+                coros = []
+                for client in _CLIENTS:
+                    coros.append(client.send(payload))
+
+                await asyncio.gather(*coros, return_exceptions=True)
+
+                logger.debug('Broadcasted to [{}] clients', len(_CLIENTS))
+        except Exception as e:
+            logger.error(
+                'Error [{}] broadcasting to [{}] clients, mime [{}]',
+                e,
+                len(_CLIENTS),
+                content.mime
             )
-
-            payload = event.model_dump_json()
-
-            try:
-                if _CLIENTS:
-                    for client in _CLIENTS:
-                        broadcast_tasks.append(asyncio.create_task(client.send(payload)))
-
-                    logger.debug('Broadcasted to [{}] clients', len(_CLIENTS))
-            except Exception as e:
-                logger.error(
-                    'Error [{}] broadcasting to [{}] clients, mime [{}]',
-                    e,
-                    len(_CLIENTS),
-                    content.mime
-                )
-    finally:
-        for task in broadcast_tasks:
-            task.close()
 
 
 async def connect_to_server(host: str, port: int, set_clipboard: SetClipboardFn, is_duplicate_clipboard: IsDuplicateClipboardFn):
@@ -143,7 +145,7 @@ async def connect_to_server(host: str, port: int, set_clipboard: SetClipboardFn,
                         data=event.data,
                     )
 
-                    logger.debug('Seting clipboard from server [{}], mime [{}]', url, event.mime)
+                    logger.debug('Setting clipboard from server [{}], mime [{}]', url, event.mime)
                     if await is_duplicate_clipboard(content):
                         logger.debug(
                             'Clipboard from server [{}] is duplicate, mime [{}]',

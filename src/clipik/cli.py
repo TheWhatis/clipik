@@ -1,11 +1,13 @@
 import asyncio
+from zeroconf import Zeroconf
 from clipik.utils import get_skipped_required_utils
-from clipik.zeroconf import register_service, unregister_service, discover_services
+from clipik.zeroconf import register_service, unregister_service, discover_services, get_zeroconf
 from clipik.variables import GRAPHIC_PROTOCOL
 from clipik.logger import logger
 from clipik.websocket import broadcast_local, connect_to_server, start_websocket_server
 from clipik.model import NewServiceEvent, LoseServiceEvent
 from clipik.exception import InitializationError
+
 
 if GRAPHIC_PROTOCOL == 'x11':
     from clipik.clipboard.x11 import set_clipboard, listen_clipboard, is_duplicate_clipboard
@@ -16,8 +18,8 @@ else:
 _SERVER_TASKS: dict[str, asyncio.Task] = {}
 
 
-async def _discover():
-    async for event in discover_services():
+async def _discover(zc: Zeroconf):
+    async for event in discover_services(zc):
         if event.event == 'new_service':
             _SERVER_TASKS[event.name] = asyncio.create_task(
                 connect_to_server(
@@ -35,7 +37,7 @@ async def _discover():
             task.cancel()
 
 
-async def _main():
+async def _main(zc: Zeroconf):
     ws_task = asyncio.create_task(
         start_websocket_server(
             set_clipboard,
@@ -44,17 +46,16 @@ async def _main():
     )
 
     await asyncio.sleep(0.1)
-
-    register_service()
+    register_service(zc)
 
     try:
         await asyncio.gather(
             ws_task,
             broadcast_local(listen_clipboard),
-            _discover(),
+            _discover(zc),
         )
     finally:
-        unregister_service()
+        unregister_service(zc)
 
 
 def main():
@@ -64,8 +65,12 @@ def main():
         skipped_utils_str: str = ', '.join(skipped_utils)
         raise InitializationError(f'Utils [{skipped_utils_str}] is required, install it')
 
+    zc = get_zeroconf()
+
     try:
-        asyncio.run(_main())
+        asyncio.run(_main(zc))
+    except KeyboardInterrupt:
+        logger.info('Bye-bye!!')
     except Exception as e:
         logger.critical('Error while asyncio.run: [{}]', e)
         raise e

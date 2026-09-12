@@ -20,7 +20,6 @@ def _get_local_ip():
 SERVICE_NAME = f"clipik-{socket.gethostname()}"
 SERVICE_TYPE = '_clipik._tcp.local.'
 LOCAL_IP = _get_local_ip()
-ZEROCONF = Zeroconf(interfaces=[LOCAL_IP])
 
 
 INFO = ServiceInfo(
@@ -32,20 +31,12 @@ INFO = ServiceInfo(
 )
 
 
-
 class _ServiceListener(ServiceListener):
     def __init__(self, queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
         self.queue = queue
         self.loop = loop
 
-    def start(self):
-        ZEROCONF.add_service_listener(SERVICE_TYPE, self)
-
-    def stop(self):
-        ZEROCONF.remove_service_listener(self)
-        ZEROCONF.close()
-
-    def add_service(self, zc, type_, name):
+    def add_service(self, zc: Zeroconf, type_, name):
         info = zc.get_service_info(type_, name)
 
         if info and info.addresses:
@@ -70,7 +61,7 @@ class _ServiceListener(ServiceListener):
 
             logger.debug('New service [{}] at [{}:{}]', name, ip, info.port)
 
-    def remove_service(self, zc, type_, name):
+    def remove_service(self, zc: Zeroconf, type_, name):
         info = zc.get_service_info(type_, name)
 
         if info and info.addresses:
@@ -95,26 +86,30 @@ class _ServiceListener(ServiceListener):
         pass
 
 
-def register_service():
-    ZEROCONF.register_service(INFO)
+def get_zeroconf() -> Zeroconf:
+    return Zeroconf(interfaces=[LOCAL_IP])
+
+
+def register_service(zc: Zeroconf):
+    zc.register_service(INFO)
     logger.info('Registered service: [{}] at [{}:{}]', SERVICE_NAME, LOCAL_IP, PEER_PORT)
 
 
-def unregister_service():
-    ZEROCONF.unregister_all_services()
-    ZEROCONF.close()
+def unregister_service(zc: Zeroconf):
+    zc.unregister_all_services()
+    zc.close()
     logger.info('Unregistered service')
 
 
-async def discover_services() -> AsyncGenerator[NewServiceEvent | LoseServiceEvent, None]:
+async def discover_services(zc: Zeroconf) -> AsyncGenerator[NewServiceEvent | LoseServiceEvent, None]:
     loop = asyncio.get_running_loop()
     queue = asyncio.Queue()
     listener = _ServiceListener(queue, loop)
-    listener.start()
+    zc.add_service_listener(SERVICE_TYPE, listener)
 
     try:
         while True:
             event = await queue.get()
             yield event
     finally:
-        listener.stop()
+        zc.remove_service_listener(zc)

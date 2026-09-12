@@ -1,6 +1,6 @@
 [project]
 name = "clipik"
-version = "0.1.13"
+version = "0.1.14"
 description = "Synchronize clipboard buffer by network"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -24,7 +24,10 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "basedpyright>=1.40.0",
+    "epc>=0.0.5",
+    "six>=1.17.0",
     "twine>=7.0.0",
+    "watchdog>=6.0.0",
 ]
 
 [project.urls]
