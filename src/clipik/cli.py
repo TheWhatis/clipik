@@ -36,11 +36,25 @@ async def _discover():
 
 
 async def _main():
-    await asyncio.gather(
-        start_websocket_server(set_clipboard, is_duplicate_clipboard),
-        broadcast_local(listen_clipboard),
-        _discover(),
+    ws_task = asyncio.create_task(
+        start_websocket_server(
+            set_clipboard,
+            is_duplicate_clipboard
+        )
     )
+
+    await asyncio.sleep(0.1)
+
+    register_service()
+
+    try:
+        await asyncio.gather(
+            ws_task,
+            broadcast_local(listen_clipboard),
+            _discover(),
+        )
+    finally:
+        unregister_service()
 
 
 def main():
@@ -51,10 +65,7 @@ def main():
         raise InitializationError(f'Utils [{skipped_utils_str}] is required, install it')
 
     try:
-        register_service()
         asyncio.run(_main())
     except Exception as e:
         logger.critical('Error while asyncio.run: [{}]', e)
         raise e
-    finally:
-        unregister_service()
