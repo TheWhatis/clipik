@@ -1,5 +1,5 @@
 #+PANDOC_OPTIONS: standalone:t
-#+PANDOC_OPTIONS: toc:t
+#+PANDOC_OPTIONS: toc:nil
 
 #+title: CLIPIK
 

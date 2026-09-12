@@ -2,18 +2,6 @@
 title: CLIPIK
 ---
 
-- [Быстрый старт](#быстрый-старт)
-- [Команды/Работа/Переменные
-  окружения](#командыработапеременные-окружения)
-- [Обязательные утилиты
-  (зависимости)](#обязательные-утилиты-зависимости)
-  - [Linux](#linux)
-    - [X11 (xorg)](#x11-xorg)
-    - [Wayland](#wayland)
-  - [MacOs (пока не поддерживается)](#macos-пока-не-поддерживается)
-  - [Windows (пока не поддерживается)](#windows-пока-не-поддерживается)
-- [<span class="todo TODO">TODO</span> ](#section)
-
 [![Latest Stable](http://img.shields.io/pypi/v/clipik.svg)](https://pypi.org/project/clipik)
 [![Scrutinizer](http://img.shields.io/scrutinizer/g/TheWhatis/clipik.svg)](https://scrutinizer-ci.com/g/TheWhatis/clipik)
 [![License](http://img.shields.io/pypi/l/edges/clipik.svg?refresh=true)](https://pypi.org/project/clipik)
