@@ -84,7 +84,8 @@ async def listen_clipboard() -> AsyncGenerator[ClipboardContent, None]:
             logger.error('wayland: wl-paste --watch read error: [{}]', e)
 
         logger.debug('wayland: wl-paste watch line: [{}]', line)
-        if not line:
+
+        if not line or line == b'\n':
             if process.returncode is not None:
                 logger.error('wayland: wl-paste --watch exited with code [{}]', process.returncode)
                 process = await _process_watch()

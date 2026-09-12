@@ -79,7 +79,7 @@ class _ServiceListener(ServiceListener):
             if ip.startswith('127.'):
                 return
 
-            asyncio.create_task(
+            asyncio.run_coroutine_threadsafe(
                 self.queue.put(LoseServiceEvent(
                     name=name,
                     ip=ip,
