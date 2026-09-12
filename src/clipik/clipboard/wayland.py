@@ -50,9 +50,18 @@ async def _write_data(mime: str, data: bytes):
         _, stderr = await proc.communicate(data)
 
         if stderr:
-            logger.warning('wayland: wl-copy --type [{}] --paste-once stderr: [{}]', mime, stderr.decode())
+            logger.warning(
+                'wayland: wl-copy --type [{}] --paste-once stderr: [{}]',
+                mime,
+                stderr.decode()
+            )
         else:
-            logger.info('Successfully pasted [{}] to clipboard wl-copy --type [{}] --paste-once', data, mime)
+            logger.info(
+                'Successfully pasted [{}] ({} bytes) to clipboard wl-copy --type [{}] --paste-once',
+                data[:99],
+                len(data),
+                mime
+            )
     except Exception as e:
         logger.error('wayland: failed to write data', e)
 
@@ -85,7 +94,7 @@ async def listen_clipboard() -> AsyncGenerator[ClipboardContent, None]:
         except Exception as e:
             logger.error('wayland: wl-paste --watch read error: [{}]', e)
 
-        logger.debug('wayland: wl-paste watch line: [{}]', line)
+        logger.debug('wayland: wl-paste watch line: [{}] ({} bytss)', line[:99], len(line))
 
         if not line or line == b'\n':
             if process.returncode is not None:
