@@ -116,7 +116,7 @@ async def connect_to_server(host: str, port: int, set_clipboard: SetClipboardFn,
         async with websockets.connect(url) as ws:
             await ws.send(HandshakeEvent().model_dump_json())
 
-            raw = await asyncio.wait_for(wc.recv(), timeout=_HANDSHAKE_TIMEOUT)
+            raw = await asyncio.wait_for(ws.recv(), timeout=_HANDSHAKE_TIMEOUT)
             ack = HandshakeAckEvent.model_validate_json(raw)
 
             if ack.protocol != PROTOCOL:
@@ -144,4 +144,4 @@ async def connect_to_server(host: str, port: int, set_clipboard: SetClipboardFn,
                 except Exception as e:
                     logger.error('Error from server [{}]: [{}]', url, e)
     except Exception as e:
-        logger.warning('Failed to conntect [{}]. Error: [{}]', url, e)
+        logger.warning('Failed to connect [{}]. Error: [{}]', url, e)
