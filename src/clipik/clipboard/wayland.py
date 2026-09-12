@@ -7,7 +7,7 @@ from clipik.logger import logger
 
 
 async def _get_types() -> list[str]:
-    for i in range(3):
+    for i in range(30):
         proc = await asyncio.create_subprocess_exec(
             'wl-paste', '--list-types',
             stdout=asyncio.subprocess.PIPE,
@@ -18,9 +18,12 @@ async def _get_types() -> list[str]:
 
         if stderr:
             logger.warning('wayland: wl-paste --list-types stderr: [{}]', stderr.decode())
+            await asyncio.sleep(0.1)
             continue
 
         return stdout.decode().splitlines()
+
+    return []
 
 
 async def _read_data(mime: str) -> bytes:
