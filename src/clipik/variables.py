@@ -3,7 +3,7 @@ from clipik.logger import logger
 
 
 PROTOCOL = 'CLIPIK'
-VERSION = '0.1.18'
+VERSION = '0.1.19'
 GRAPHIC_PROTOCOL = 'x11'
 
 if os.getenv('WAYLAND_DISPLAY'):

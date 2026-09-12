@@ -16,7 +16,6 @@ def _get_local_ip():
     return ip
 
 
-
 SERVICE_NAME = f"clipik-{socket.gethostname()}"
 SERVICE_TYPE = '_clipik._tcp.local.'
 LOCAL_IP = _get_local_ip()
