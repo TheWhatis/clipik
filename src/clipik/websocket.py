@@ -1,5 +1,4 @@
 import os
-import json
 import asyncio
 from collections.abc import Callable, Awaitable, AsyncGenerator
 import websockets
@@ -101,7 +100,7 @@ async def broadcast_local(listen_clipboard: ListenClipboardFn):
         try:
             if _CLIENTS:
                 await asyncio.gather(
-                    *[c.send(json.dumps(payload)) for c in _CLIENTS],
+                    *[c.send(payload) for c in _CLIENTS],
                     return_exceptions=True
                 )
 
@@ -140,13 +139,18 @@ async def connect_to_server(host: str, port: int, set_clipboard: SetClipboardFn,
                         data=event.data,
                     )
 
-                    logger.debug('Seting clipboard from server [{}], mime [{}]', url, mime)
+                    logger.debug('Seting clipboard from server [{}], mime [{}]', url, event.mime)
                     if await is_duplicate_clipboard(content):
-                        logger.debug('Clipboard from server [{}] is duplicate, mime [{}]', url, mime)
+                        logger.debug(
+                            'Clipboard from server [{}] is duplicate, mime [{}]',
+                            url,
+                            event.mime
+                        )
+
                         continue
 
                     await set_clipboard(content)
-                    logger.debug('Set clipboard from server [{}], mime [{}]', url, mime)
+                    logger.debug('Set clipboard from server [{}], mime [{}]', url, event.mime)
                 except Exception as e:
                     logger.error('Error from server [{}]: [{}]', url, e)
     except Exception as e:
