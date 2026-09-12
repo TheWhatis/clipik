@@ -1,6 +1,6 @@
 [project]
 name = "clipik"
-version = "0.1.9"
+version = "0.1.10"
 description = "Synchronize clipboard buffer by network"
 readme = "README.md"
 requires-python = ">=3.11"

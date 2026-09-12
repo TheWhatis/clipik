@@ -16,7 +16,7 @@ async def _get_types() -> list[str]:
     stdout, stderr = await proc.communicate()
 
     if stderr:
-        logger.warning('wayland: wl-paste --list-types stderr: [{}]', stderr.decode)
+        logger.warning('wayland: wl-paste --list-types stderr: [{}]', stderr.decode())
 
     return stdout.decode(errors='replace').split()
 
