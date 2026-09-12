@@ -38,16 +38,20 @@ async def _read_data(mime: str) -> bytes:
 
 async def _write_data(mime: str, data: bytes):
     try:
+        logger.debug('Executing wl-copy --type [{}]', mime)
         proc = await asyncio.create_subprocess_exec(
             'wl-copy', '--type', mime,
             stdin=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
 
+        logger.debug('Awaiting communicate wl-copy --type [{}]', mime)
         _, stderr = await proc.communicate(data)
 
         if stderr:
             logger.warning('wayland: wl-copy --type {} stderr: [{}]', mime, stderr.decode())
+        else:
+            logger.info('Successfully pasted [{}] to clipboard wl-copy --type [{}]', data, mime)
     except Exception as e:
         logger.error('wayland: failed to write data', e)
 
@@ -118,12 +122,15 @@ async def listen_clipboard() -> AsyncGenerator[ClipboardContent, None]:
 
 
 async def set_clipboard(content: ClipboardContent):
+    logger.debug('Executing set_clipboard')
     if not content.data:
+        logger.warning('Empty content.data')
         return
 
     raw: bytes = content.data
 
     if isinstance(content.data, str):
+        logger.info('Content.data is str', content.data)
         raw = base64.b64decode(content.data)
 
     await _write_data(content.mime, raw)
