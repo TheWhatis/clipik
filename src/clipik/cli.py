@@ -152,12 +152,17 @@ def main():
         from clipik.clipboard.wayland import set_clipboard, listen_clipboard, is_duplicate_clipboard
 
     logger.info('Initialize container')
-    container = Container(
-        config=config,
-        set_clipboard=set_clipboard,
-        listen_clipboard=listen_clipboard,
-        is_duplicate_clipboard=is_duplicate_clipboard,
-    )
+
+    try:
+        container = Container(
+            config=config,
+            set_clipboard=set_clipboard,
+            listen_clipboard=listen_clipboard,
+            is_duplicate_clipboard=is_duplicate_clipboard,
+        )
+    except Exception as e:
+        logger.critical('Error [{}] container initialization', e)
+        return
 
     try:
         logger.info('Runnine asyncio main entrypoint [_main]')

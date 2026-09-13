@@ -1,3 +1,4 @@
+import shutil
 import socket
 from typing import TYPE_CHECKING
 from websockets import ServerConnection
@@ -64,15 +65,14 @@ class Container:
             ]
 
         self.required_utils = required_utils
+        self.raise_required_utils_is_needed()
 
     def raise_required_utils_is_needed(self):
         skipped_utils: list[str] = []
 
-        for util in app.required_utils:
+        for util in self.required_utils:
             if shutil.which(util) is None:
                 skipped_utils.append(util)
-
-        skipped_utils
 
         if skipped_utils:
             skipped_utils_str: str = ', '.join(skipped_utils)
