@@ -5,7 +5,7 @@ import argparse
 from loguru import logger
 from pathlib import Path
 from clipik.exception import InitializationError
-from clipik.zeroconf import register_service, unregister_service, discover_services
+from clipik.zeroconf import register_service, unregister_service, discover_services, get_zeroconf
 from clipik.websocket import broadcast_local, connect_to_server, start_websocket_server
 from clipik.config import write_fresh_config, read_config_file
 from clipik.logger import initialize_logger
@@ -69,6 +69,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=Container.program,
         description='Synchronize clipboard by network',
+    )
+
+    parser.add_argument(
+        '--version',
+        action='version',
+        version=f"{Container.program} {Container.version}"
     )
 
     parser.add_argument(
@@ -164,6 +170,7 @@ def main():
     try:
         container = Container(
             config=config,
+            zeroconf=get_zeroconf(),
             set_clipboard=set_clipboard,
             listen_clipboard=listen_clipboard,
         )

@@ -78,8 +78,8 @@ class _ServiceListener(ServiceListener):
         pass
 
 
-def get_zeroconf(local_ip: str) -> Zeroconf:
-    return Zeroconf(interfaces=[local_ip])
+def get_zeroconf() -> Zeroconf:
+    return Zeroconf()
 
 
 def register_service(container: "Container"):
