@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class Container:
     program: str = 'clipik'
     protocol: str = 'CLIPIK'
-    version: str = '0.3.0'
+    version: str = '0.5.1'
 
     service_name: str
     service_type: str = '_clipik._tcp.local.'

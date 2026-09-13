@@ -85,6 +85,8 @@ async def _ws_handler(
         for task in set_clipboard_tasks:
             task.cancel()
 
+        await asyncio.gather(*set_clipboard_tasks)
+
 
 async def start_websocket_server(container: Container):
     async def handler(websocket: ServerConnection):

@@ -13,6 +13,11 @@ from clipik.container import Container
 
 
 _SERVER_TASKS: dict[str, asyncio.Task] = {}
+_AWAITING_TASKS: list[asyncio.Task] = []
+
+
+async def _await_task(task: asyncio.Task):
+    await task
 
 
 async def _discover(container: Container):
@@ -35,6 +40,7 @@ async def _discover(container: Container):
             task = _SERVER_TASKS[event.name]
             del _SERVER_TASKS[event.name]
             task.cancel()
+            _AWAITING_TASKS.append(asyncio.create_task(_await_task(task)))
 
 
 async def _main(container: Container):
@@ -51,6 +57,12 @@ async def _main(container: Container):
         )
     finally:
         unregister_service(container)
+
+        for task in _SERVER_TASKS:
+            task.cancel()
+            _AWAITING_TASKS.append(task)
+
+        await asyncio.gather(*_AWAITING_TASKS, return_exceptions=True)
 
 
 def _build_parser() -> argparse.ArgumentParser:
