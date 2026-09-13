@@ -119,6 +119,7 @@ def register_service(container: "Container"):
     info = ServiceInfo(
         container.service_type,
         f"{container.service_name}.{container.service_type}",
+        addresses=addresses,
         port=container.config.port,
         properties={'version': container.version},
     )
