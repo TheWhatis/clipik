@@ -33,13 +33,14 @@ clipik
 
 ```
 $ clipik -h
-usage: clipik [-h] [--config PATH] [--port PORT] [--size-limit BYTES] [--handshake-timeout SECONDS]
-              [--log-level LEVEL]
+usage: clipik [-h] [--version] [--config PATH] [--port PORT] [--size-limit BYTES]
+              [--handshake-timeout SECONDS] [--log-level LEVEL]
 
 Synchronize clipboard by network
 
 options:
   -h, --help            show this help message and exit
+  --version             show program's version number and exit
   --config PATH         Force choice config file
   --port PORT           WebSocket TCP-port
   --size-limit BYTES    Max size WS-messages and stdout from wayland/x11 clipboard

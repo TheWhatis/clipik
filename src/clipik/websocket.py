@@ -173,7 +173,7 @@ async def connect_to_server(
                     )
                     await container.set_clipboard(content)
                     logger.debug(
-                        'Set clipboard from server [{}], mime [{}]',
+                        'Setted clipboard from server [{}], mime [{}]',
                         url,
                         event.mime,
                     )
