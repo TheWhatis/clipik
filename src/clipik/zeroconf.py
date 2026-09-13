@@ -40,7 +40,7 @@ class _ServiceListener(ServiceListener):
         info = zc.get_service_info(type_, name)
 
         if info and info.addresses:
-            for packed in info.addresse:
+            for packed in info.addresses:
                 ip = _addr_to_str(packed)
 
                 asyncio.run_coroutine_threadsafe(
