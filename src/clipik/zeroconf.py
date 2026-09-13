@@ -1,4 +1,3 @@
-import os
 import ipaddress
 import asyncio
 from typing import TYPE_CHECKING
@@ -34,6 +33,7 @@ class _ServiceListener(ServiceListener):
 
     def add_service(self, zc: Zeroconf, type_, name):
         if name == self.own_name:
+            logger.info('Service name is [{}], skip', name)
             return
 
         info = zc.get_service_info(type_, name)
@@ -55,6 +55,7 @@ class _ServiceListener(ServiceListener):
 
     def remove_service(self, zc: Zeroconf, type_, name):
         if name == self.own_name:
+            logger.info('Service name is [{}], skip', name)
             return
 
         info = zc.get_service_info(type_, name)
@@ -86,7 +87,6 @@ def register_service(container: "Container"):
     info = ServiceInfo(
         container.service_type,
         f"{container.service_name}.{container.service_type}",
-        addresses=[],
         port=container.config.port,
         properties={'version': container.version},
     )
