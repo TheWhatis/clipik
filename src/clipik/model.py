@@ -1,3 +1,4 @@
+import ipaddress
 import os
 from typing import Literal
 from pydantic import BaseModel, field_validator
@@ -88,15 +89,14 @@ class Config(BaseModel):
         if not self.allowed_ips:
             return True
 
-        if self.allowed_ips is None:
-            return True
-
         addr = ipaddress.ip_address(ip)
+
         for entry in self.allowed_ips:
             if '/' in entry:
                 if addr in ipaddress.ip_network(entry, strict=False):
                     return True
-                elif addr == ipaddress.ip_address(entry):
+            else:
+                if addr == ipaddress.ip_address(entry):
                     return True
 
         return False

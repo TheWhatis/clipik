@@ -16,13 +16,17 @@ _SERVER_TASKS: dict[str, asyncio.Task] = {}
 async def _discover(container: Container):
     async for event in discover_services(container):
         if event.event == 'new_service':
-            _SERVER_TASKS[event.name] = asyncio.create_task(
-                connect_to_server(
-                    host=event.host,
-                    port=event.port,
-                    container=container,
+            if not container.config.is_ip_allowed(event.ip):
+                logger.warning('Ip [{}] is not allowed, stop connecting to servce', event.ip)
+            else:
+                _SERVER_TASKS[event.name] = asyncio.create_task(
+                    connect_to_server(
+                        host=event.host,
+                        port=event.port,
+                        container=container,
+                    )
                 )
-            )
+
             continue
 
         if event.event == 'lose_service' and event.name in _SERVER_TASKS:

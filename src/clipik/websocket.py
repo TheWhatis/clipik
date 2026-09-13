@@ -17,20 +17,38 @@ async def _ws_handler(
     container: Container,
 ):
     try:
-        msg = await asyncio.wait_for(websocket.recv(), timeout=container.config.handshake_timeout)
+        ip = websocket.remote_address[0]
+
+        if not container.config.is_ip_allowed(ip):
+            logger.warning('Client ip [{}] is not allowed', ip)
+            await websocket.close(code=1008, reason='Ip is not allowed')
+            return
+    except Exception as e:
+        logger.warning('Error with check client ip [{}]', e)
+        return
+
+    try:
+        try:
+            msg = await asyncio.wait_for(
+                websocket.recv(),
+                timeout=container.config.handshake_timeout
+            )
+        except asyncio.TimeoutError:
+            logger.warning('Handshake timeout from [{}]', websocket.remote_address[0])
+            await websocket.close(code=1002, reason='Handshake timeout')
+            return
 
         try:
             event = HandshakeEvent.model_validate_json(msg)
         except Exception as e:
             logger.warning('Invalid handshake [{}]', msg)
-            await websocket.close(code=1000, reason='Invalid handshake')
+            await websocket.close(code=1007, reason='Invalid handshake')
             return
 
         if event.protocol != container.protocol:
             logger.warning('Invalid handshake protocol [{}]', event.protocol)
-            await websocket.close(code=1000, reason='Invalid handshake')
+            await websocket.close(code=1002, reason='Invalid handshake')
             return
-
 
         ack_event = HandshakeAckEvent(
             protocol=container.protocol,
@@ -40,6 +58,7 @@ async def _ws_handler(
         await websocket.send(ack_event.model_dump_json())
     except Exception as e:
         logger.warning('Handshake failed: [{}]', e)
+        return
 
     container.clients.add(websocket)
     peer = websocket.remote_address[0]
