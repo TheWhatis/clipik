@@ -1,32 +1,26 @@
 import asyncio
-from zeroconf import Zeroconf
-from clipik.utils import get_skipped_required_utils
-from clipik.zeroconf import register_service, unregister_service, discover_services, get_zeroconf
-from clipik.variables import GRAPHIC_PROTOCOL
-from clipik.logger import logger
+import argparse
+from loguru import logger
+from pathlib import Path
+from clipik.zeroconf import register_service, unregister_service, discover_services
 from clipik.websocket import broadcast_local, connect_to_server, start_websocket_server
-from clipik.model import NewServiceEvent, LoseServiceEvent
-from clipik.exception import InitializationError
-
-
-if GRAPHIC_PROTOCOL == 'x11':
-    from clipik.clipboard.x11 import set_clipboard, listen_clipboard, is_duplicate_clipboard
-else:
-    from clipik.clipboard.wayland import set_clipboard, listen_clipboard, is_duplicate_clipboard
+from clipik.config import write_fresh_config, read_config_file
+from clipik.enum import GraphicProtocol
+from clipik.logger import initialize_logger
+from clipik.container import Container
 
 
 _SERVER_TASKS: dict[str, asyncio.Task] = {}
 
 
-async def _discover(zc: Zeroconf):
-    async for event in discover_services(zc):
+async def _discover(container: Container):
+    async for event in discover_services(container):
         if event.event == 'new_service':
             _SERVER_TASKS[event.name] = asyncio.create_task(
                 connect_to_server(
                     host=event.host,
                     port=event.port,
-                    set_clipboard=set_clipboard,
-                    is_duplicate_clipboard=is_duplicate_clipboard
+                    container=container,
                 )
             )
             continue
@@ -37,38 +31,133 @@ async def _discover(zc: Zeroconf):
             task.cancel()
 
 
-async def _main(zc: Zeroconf):
-    ws_task = asyncio.create_task(
-        start_websocket_server(
-            set_clipboard,
-            is_duplicate_clipboard
-        )
-    )
+async def _main(container: Container):
+    ws_task = asyncio.create_task(start_websocket_server(container))
 
     await asyncio.sleep(0.1)
-    register_service(zc)
+    register_service(container)
 
     try:
         await asyncio.gather(
             ws_task,
-            broadcast_local(listen_clipboard),
-            _discover(zc),
+            broadcast_local(container),
+            _discover(container),
         )
     finally:
-        unregister_service(zc)
+        unregister_service(container)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog=Container.program,
+        description='Synchronize clipboard by network',
+    )
+
+    parser.add_argument(
+        '--config',
+        dest='config',
+        type=Path,
+        default=Path.home() / '.config' / 'clipik' / 'config.json',
+        metavar='PATH',
+        help='Force choice config file',
+    )
+
+    parser.add_argument(
+        '--graphic-protocol',
+        dest='graphic_protocol',
+        type=GraphicProtocol,
+        choices=list(GraphicProtocol),
+        default=None,
+        metavar='{x11,wayland}',
+        help='force choice graphic protocol, elsewhere set from env WAYLAND_DISPLAY'
+    )
+
+    parser.add_argument(
+        '--port',
+        type=int,
+        default=None,
+        metavar='PORT',
+        help='WebSocket TCP-port',
+    )
+
+    parser.add_argument(
+        '--size-limit',
+        dest='size_limit',
+        type=int,
+        default=None,
+        metavar='BYTES',
+        help='Max size WS-messages and stdout from wayland/x11 clipboard'
+    )
+
+    parser.add_argument(
+        '--handshake-timeout',
+        dest='handshake_timeout',
+        type=int,
+        default=None,
+        metavar='SECONDS',
+        help='Timeout for wait to websocket handshake',
+    )
+
+    parser.add_argument(
+        '--log-level',
+        dest='log_level',
+        type=str,
+        default=None,
+        metavar='LEVEL',
+        help='Logging level, default [INFO]'
+    )
+
+    return parser
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    return _build_parser().parse_args(argv)
+
+
+def parse_overrides(argv: list[str] | None = None) -> dict[str, object]:
+    args = parse_args(argv)
+
+    return {
+        key: value
+        for key, value in vars(args).items()
+        if value is not None
+    }
 
 
 def main():
-    skipped_utils: list[str] = get_skipped_required_utils()
+    fresh_config_path = Path.home() / '.config' / 'clipik' / 'config.json'
+    fresh_config = write_fresh_config(fresh_config_path)
+    overrides = parse_overrides()
+    config_path: Path = overrides.get('config')
+    config = read_config_file(config_path, overrides)
+    config.resolve_properties()
+    initialize_logger(config)
 
-    if skipped_utils:
-        skipped_utils_str: str = ', '.join(skipped_utils)
-        raise InitializationError(f'Utils [{skipped_utils_str}] is required, install it')
+    if fresh_config:
+        logger.info('Config has been freshed [{}]', fresh_config_path)
 
-    zc = get_zeroconf()
+    logger.info('Config file [{}]', config_path)
+
+    logger.info('Initialized config')
+    for key, value in config.model_dump().items():
+        logger.info('Config [{}]=[{}]', key, value)
+
+    if config.graphic_protocol == GraphicProtocol.X11:
+        from clipik.clipboard.x11 import set_clipboard, listen_clipboard, is_duplicate_clipboard
+    else:
+        from clipik.clipboard.wayland import set_clipboard, listen_clipboard, is_duplicate_clipboard
+
+    logger.info('Initialize container')
+    container = Container(
+        config=config,
+        set_clipboard=set_clipboard,
+        listen_clipboard=listen_clipboard,
+        is_duplicate_clipboard=is_duplicate_clipboard,
+    )
 
     try:
-        asyncio.run(_main(zc))
+        logger.info('Runnine asyncio main entrypoint [_main]')
+        asyncio.run(_main(container))
     except KeyboardInterrupt:
         logger.info('Bye-bye!!')
     except Exception as e:

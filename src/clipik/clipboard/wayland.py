@@ -2,9 +2,9 @@ import asyncio
 from asyncio.subprocess import Process
 import base64
 from collections.abc import AsyncGenerator
-from clipik.model import ClipboardContent
+from clipik.model import ClipboardContent, Config
 from clipik.logger import logger
-from clipik.variables import SIZE_LIMIT
+
 
 async def _get_types() -> list[str]:
     proc = await asyncio.create_subprocess_exec(
@@ -66,23 +66,23 @@ async def _write_data(mime: str, data: bytes):
         logger.error('wayland: failed to write data', e)
 
 
-async def _process_watch() -> Process:
+async def _process_watch(size_limit: int) -> Process:
     while True:
         try:
             return await asyncio.create_subprocess_exec(
                 'wl-paste', '--watch', 'sh', '-c', 'base64 -w0; echo',
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
-                limit=SIZE_LIMIT,
+                limit=size_limit,
             )
         except Exception as e:
             logger.error('wayland: failed to start wl-paste --watch: [{}]', e)
             continue
 
 
-async def listen_clipboard() -> AsyncGenerator[ClipboardContent, None]:
+async def listen_clipboard(size_limit: int) -> AsyncGenerator[ClipboardContent, None]:
     logger.debug('Started listen_clipboard wayland')
-    process = await _process_watch()
+    process = await _process_watch(size_limit)
 
     while True:
         try:

@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator
 from clipik.model import ClipboardContent
 
 
-async def listen_clipboard() -> AsyncGenerator[ClipboardContent, None]:
+async def listen_clipboard(size_limit: int) -> AsyncGenerator[ClipboardContent, None]:
     while True:
         try:
             await asyncio.to_thread(subprocess.run, ['clipnotify'], check=True)

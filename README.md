@@ -26,10 +26,72 @@ uv pip install -e .
 clipik
 ```
 
-# Команды/Работа/Переменные окружения
+# Использование
 
-На данный момент никаких аргументов не принимает, одновременно сервер и
-клиент запускается по команде `clipik`,
+При передаче опций, они перезаписывают данные с конфига и переменных
+окружения.
+
+```
+$ clipik --help
+usage: clipik [-h] [--config PATH] [--graphic-protocol {x11,wayland}] [--port PORT] [--size-limit BYTES]
+              [--handshake-timeout SECONDS] [--log-level LEVEL]
+
+Synchronize clipboard by network
+
+options:
+  -h, --help            show this help message and exit
+  --config PATH         Force choice config file
+  --graphic-protocol {x11,wayland}
+                        force choice graphic protocol, elsewhere set from env WAYLAND_DISPLAY
+  --port PORT           WebSocket TCP-port
+  --size-limit BYTES    Max size WS-messages and stdout from wayland/x11 clipboard
+  --handshake-timeout SECONDS
+                        Timeout for wait to websocket handshake
+  --log-level LEVEL     Logging level, default [INFO]
+```
+
+# Конфигурация
+
+По-умолчанию конфигурация находиться по пути
+`~/.config/clipik/config.json`, если его не существует, при запуске
+**clipik** он создается автоматически, но не все параметры там будут
+прописаны.
+
+Конфиг будет иметь вид:
+
+``` json
+{
+  "port": 8765,
+  "size_limit": 67108864,
+  "log_level": "INFO",
+  "handshake_timeout": 7
+}
+```
+
+Со всеми параметрами такой:
+
+``` json
+{
+  "graphic_protocol": "wayland",
+  "port": 8765,
+  "size_limit": 67108864,
+  "log_level": "INFO",
+  "handshake_timeout": 7,
+  "allowed_ips": [
+      "192.164.0.1/24",
+      "100.0.0.1",
+      "100.0.0.2"
+  ]
+}
+```
+
+### Graphic Protocol (параметр graphic<sub>protocol</sub>)
+
+Если его не указывать в конфигурации, он будет определен исходя
+переданной опции в cli, либо из наличия переменной окружения
+`WAYLAND_DISPLAY`
+
+# Переменные окружения
 
 Имеются только переменные окружения, за счет которых можно менять
 свойства:
@@ -61,7 +123,7 @@ clipik
 
 ## Windows (пока не поддерживается)
 
-# <span class="todo TODO">TODO</span> 
+# <span class="todo TODO">TODO</span> \[1/7\]
 
 - [ ] Возможность регестрировать сервисы для подключения к удаленным
   сетями
@@ -71,3 +133,7 @@ clipik
   файловых менеджеров
 - [ ] Поддержка MacOS
 - [ ] Поддержка Windows
+- [ ] Фоновая загрузка больших файлов с ожиданием вставки (до конца
+  загрузки)
+- [x] Поддержка передачи данных не только через переменные окружения, но
+  и через опции и конфиги

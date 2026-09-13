@@ -1,11 +1,9 @@
 import os
 import asyncio
-from collections.abc import Callable, Awaitable, AsyncGenerator
 import websockets
-from typing import TypeAlias
+from loguru import logger
 from websockets.asyncio.server import ServerConnection
-from clipik.logger import logger
-from clipik.variables import PROTOCOL, PEER_PORT, SIZE_LIMIT
+from clipik.container import Container
 from clipik.model import (
     ClipboardContent,
     HandshakeEvent,
@@ -14,19 +12,12 @@ from clipik.model import (
 )
 
 
-SetClipboardFn: TypeAlias = Callable[[ClipboardContent], Awaitable[None]]
-ListenClipboardFn: TypeAlias = Callable[[], AsyncGenerator[ClipboardContent, None]]
-IsDuplicateClipboardFn: TypeAlias = Callable[[ClipboardContent], Awaitable[bool]]
-
-
-_HANDSHAKE_TIMEOUT = os.getenv('CLIPIK_HANDSHAKE_TIMEOUT', default=7)
-_HANDSHAKE_TIMEOUT = int(_HANDSHAKE_TIMEOUT)
-_CLIENTS: set[ServerConnection] = set()
-
-
-async def _ws_handler(websocket: ServerConnection, set_clipboard: SetClipboardFn, is_duplicate_clipboard: IsDuplicateClipboardFn):
+async def _ws_handler(
+    websocket: ServerConnection,
+    container: Container,
+):
     try:
-        msg = await asyncio.wait_for(websocket.recv(), timeout=_HANDSHAKE_TIMEOUT)
+        msg = await asyncio.wait_for(websocket.recv(), timeout=container.config.handshake_timeout)
 
         try:
             event = HandshakeEvent.model_validate_json(msg)
@@ -35,16 +26,22 @@ async def _ws_handler(websocket: ServerConnection, set_clipboard: SetClipboardFn
             await websocket.close(code=1000, reason='Invalid handshake')
             return
 
-        if event.protocol != PROTOCOL:
+        if event.protocol != container.protocol:
             logger.warning('Invalid handshake protocol [{}]', event.protocol)
             await websocket.close(code=1000, reason='Invalid handshake')
             return
 
-        await websocket.send(HandshakeAckEvent().model_dump_json())
+
+        ack_event = HandshakeAckEvent(
+            protocol=container.protocol,
+            version=container.version,
+        )
+
+        await websocket.send(ack_event.model_dump_json())
     except Exception as e:
         logger.warning('Handshake failed: [{}]', e)
 
-    _CLIENTS.add(websocket)
+    container.clients.add(websocket)
     peer = websocket.remote_address[0]
     logger.info('Client connected: [{}]', peer)
 
@@ -57,37 +54,43 @@ async def _ws_handler(websocket: ServerConnection, set_clipboard: SetClipboardFn
                 content = ClipboardContent(mime=event.mime, data=event.data)
 
                 logger.debug('Setting clipboard from [{}]: [{}]', peer, content.mime)
-                if await is_duplicate_clipboard(content):
-                    logger.debug('Clipboard from [{}] is duplicate: [{}]', peer, content.mime)
+                if await container.is_duplicate_clipboard(content):
+                    logger.debug(
+                        'Clipboard from [{}] is duplicate: [{}]',
+                        peer,
+                        content.mime
+                    )
                     continue
 
-                set_clipboard_tasks.append(asyncio.create_task(set_clipboard(content)))
+                set_clipboard_tasks.append(asyncio.create_task(container.set_clipboard(content)))
                 logger.debug('Set clipboard from [{}]: [{}]', peer, content.mime)
             except Exception as e:
                 logger.error('Error listen peer [{}]: [{}]', peer, e)
     except websockets.exceptions.ConnectionClosed:
         logger.info('Client disconnected: [{}]', peer)
     finally:
-        _CLIENTS.remove(websocket)
+        container.clients.remove(websocket)
 
         for task in set_clipboard_tasks:
             task.cancel()
 
 
-async def start_websocket_server(
-    set_clipboard: SetClipboardFn,
-    is_duplicate_clipboard: IsDuplicateClipboardFn
-):
+async def start_websocket_server(container: Container):
     async def handler(websocket: ServerConnection):
-        await _ws_handler(websocket, set_clipboard, is_duplicate_clipboard)
+        await _ws_handler(websocket, container)
 
-    async with websockets.serve(handler, '0.0.0.0', PEER_PORT, max_size=SIZE_LIMIT):
-        logger.info('Websocket server started on [{}]', PEER_PORT)
+    async with websockets.serve(
+        handler,
+        '0.0.0.0',
+        container.config.port,
+        max_size=container.config.size_limit
+    ):
+        logger.info('Websocket server started on [{}]', container.config.port)
         await asyncio.Future()
 
 
-async def broadcast_local(listen_clipboard: ListenClipboardFn):
-    async for content in listen_clipboard():
+async def broadcast_local(container: Container):
+    async for content in container.listen_clipboard(container.config.size_limit):
         if not content.data:
             continue
 
@@ -99,34 +102,43 @@ async def broadcast_local(listen_clipboard: ListenClipboardFn):
         payload = event.model_dump_json()
 
         try:
-            if _CLIENTS:
+            if container.clients:
                 coros = []
-                for client in _CLIENTS:
+                for client in container.clients:
                     coros.append(client.send(payload))
 
                 await asyncio.gather(*coros, return_exceptions=True)
 
-                logger.debug('Broadcasted to [{}] clients', len(_CLIENTS))
+                logger.debug('Broadcasted to [{}] clients', len(container.clients))
         except Exception as e:
             logger.error(
                 'Error [{}] broadcasting to [{}] clients, mime [{}]',
                 e,
-                len(_CLIENTS),
+                len(container.clients),
                 content.mime
             )
 
 
-async def connect_to_server(host: str, port: int, set_clipboard: SetClipboardFn, is_duplicate_clipboard: IsDuplicateClipboardFn):
+async def connect_to_server(
+    host: str,
+    port: int,
+    container: Container,
+):
     url = f"ws://{host}:{port}"
 
     try:
-        async with websockets.connect(url, max_size=SIZE_LIMIT) as ws:
-            await ws.send(HandshakeEvent().model_dump_json())
+        async with websockets.connect(url, max_size=container.config.size_limit) as ws:
+            event = HandshakeEvent(
+                protocol=container.protocol,
+                version=container.version,
+            )
 
-            msg = await asyncio.wait_for(ws.recv(), timeout=_HANDSHAKE_TIMEOUT)
+            await ws.send(event.model_dump_json())
+
+            msg = await asyncio.wait_for(ws.recv(), timeout=container.config.handshake_timeout)
             ack = HandshakeAckEvent.model_validate_json(msg)
 
-            if ack.protocol != PROTOCOL:
+            if ack.protocol != container.protocol:
                 logger.warning('Invalid protocol [{}] for [{}]', ack.protocol, host)
                 return
 
@@ -141,18 +153,26 @@ async def connect_to_server(host: str, port: int, set_clipboard: SetClipboardFn,
                         data=event.data,
                     )
 
-                    logger.debug('Setting clipboard from server [{}], mime [{}]', url, event.mime)
-                    if await is_duplicate_clipboard(content):
+                    logger.debug(
+                        'Setting clipboard from server [{}], mime [{}]',
+                        url,
+                        event.mime,
+                    )
+                    if await container.is_duplicate_clipboard(content):
                         logger.debug(
                             'Clipboard from server [{}] is duplicate, mime [{}]',
                             url,
-                            event.mime
+                            event.mime,
                         )
 
                         continue
 
-                    await set_clipboard(content)
-                    logger.debug('Set clipboard from server [{}], mime [{}]', url, event.mime)
+                    await container.set_clipboard(content)
+                    logger.debug(
+                        'Set clipboard from server [{}], mime [{}]',
+                        url,
+                        event.mime,
+                    )
                 except Exception as e:
                     logger.error('Error from server [{}]: [{}]', url, e)
     except Exception as e:

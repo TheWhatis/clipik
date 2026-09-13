@@ -1,39 +1,26 @@
 import os
 import socket
 import asyncio
+from typing import TYPE_CHECKING
+from loguru import logger
 from collections.abc import AsyncGenerator
 from clipik.model import LoseServiceEvent, NewServiceEvent
 from zeroconf import ServiceInfo, Zeroconf, ServiceListener
-from clipik.variables import VERSION, PEER_PORT
-from clipik.logger import logger
 
-
-def _get_local_ip():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(('8.8.8.8', 80))
-    ip = s.getsockname()[0]
-    s.close()
-    return ip
-
-
-SERVICE_NAME = f"clipik-{socket.gethostname()}"
-SERVICE_TYPE = '_clipik._tcp.local.'
-LOCAL_IP = _get_local_ip()
-
-
-INFO = ServiceInfo(
-    SERVICE_TYPE,
-    f"{SERVICE_NAME}.{SERVICE_TYPE}",
-    addresses=[socket.inet_aton(LOCAL_IP)],
-    port=PEER_PORT,
-    properties={'version': VERSION},
-)
+if TYPE_CHECKING:
+    from clipik.container import Container
 
 
 class _ServiceListener(ServiceListener):
-    def __init__(self, queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
+    def __init__(
+        self,
+        queue: asyncio.Queue,
+        loop: asyncio.AbstractEventLoop,
+        container: "Container",
+    ):
         self.queue = queue
         self.loop = loop
+        self.container = container
 
     def add_service(self, zc: Zeroconf, type_, name):
         info = zc.get_service_info(type_, name)
@@ -44,8 +31,14 @@ class _ServiceListener(ServiceListener):
             if ip.startswith('127.'):
                 return
 
-            if ip == LOCAL_IP:
-                logger.debug('Local service registered: [{}] at [{}:{}]', name, ip, info.port)
+            if ip == self.container.local_ip:
+                logger.debug(
+                    'Local service registered: [{}] at [{}:{}]',
+                    name,
+                    ip,
+                    info.port
+                )
+
                 return
 
             asyncio.run_coroutine_threadsafe(
@@ -81,34 +74,49 @@ class _ServiceListener(ServiceListener):
 
             logger.debug('Lose service [{}]', name)
 
-    def update_service(self, zc, type_, name):
+    def update_service(self, zc: Zeroconf, type_, name):
         pass
 
 
-def get_zeroconf() -> Zeroconf:
-    return Zeroconf(interfaces=[LOCAL_IP])
+def get_zeroconf(local_ip: str) -> Zeroconf:
+    return Zeroconf(interfaces=[local_ip])
 
 
-def register_service(zc: Zeroconf):
-    zc.register_service(INFO)
-    logger.info('Registered service: [{}] at [{}:{}]', SERVICE_NAME, LOCAL_IP, PEER_PORT)
+def register_service(container: "Container"):
+    INFO = ServiceInfo(
+        container.service_type,
+        f"{container.service_name}.{container.service_type}",
+        addresses=[socket.inet_aton(container.local_ip)],
+        port=container.config.port,
+        properties={'version': container.version},
+    )
+
+    container.zeroconf.register_service(INFO)
+    logger.info(
+        'Registered service: [{}] at [{}:{}]',
+        container.service_name,
+        container.local_ip,
+        container.config.port
+    )
 
 
-def unregister_service(zc: Zeroconf):
-    zc.unregister_all_services()
-    zc.close()
+def unregister_service(container: "Container"):
+    container.zeroconf.unregister_all_services()
+    container.zeroconf.close()
     logger.info('Unregistered service')
 
 
-async def discover_services(zc: Zeroconf) -> AsyncGenerator[NewServiceEvent | LoseServiceEvent, None]:
+async def discover_services(
+    container: Container
+) -> AsyncGenerator[NewServiceEvent | LoseServiceEvent, None]:
     loop = asyncio.get_running_loop()
     queue = asyncio.Queue()
-    listener = _ServiceListener(queue, loop)
-    zc.add_service_listener(SERVICE_TYPE, listener)
+    listener = _ServiceListener(queue, loop, container)
+    container.zeroconf.add_service_listener(container.service_type, listener)
 
     try:
         while True:
             event = await queue.get()
             yield event
     finally:
-        zc.remove_service_listener(zc)
+        container.zeroconf.remove_service_listener(listener)
