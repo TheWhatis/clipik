@@ -31,17 +31,15 @@ CLIPIK - сервис для реализации общего буфера об
   При передаче опций, они перезаписывают данные с конфига и переменных окружения.
 
   #+begin_src text
-    $ clipik --help
-    usage: clipik [-h] [--config PATH] [--graphic-protocol {x11,wayland}] [--port PORT] [--size-limit BYTES]
-                  [--handshake-timeout SECONDS] [--log-level LEVEL]
+    $ clipik -h
+    usage: clipik [-h] [--config PATH] [--port PORT] [--size-limit BYTES] [--handshake-timeout SECONDS]
+                  [--log-level LEVEL]
 
     Synchronize clipboard by network
 
     options:
       -h, --help            show this help message and exit
       --config PATH         Force choice config file
-      --graphic-protocol {x11,wayland}
-                            force choice graphic protocol, elsewhere set from env WAYLAND_DISPLAY
       --port PORT           WebSocket TCP-port
       --size-limit BYTES    Max size WS-messages and stdout from wayland/x11 clipboard
       --handshake-timeout SECONDS
@@ -67,7 +65,6 @@ CLIPIK - сервис для реализации общего буфера об
   Со всеми параметрами такой:
   #+begin_src json
     {
-      "graphic_protocol": "wayland",
       "port": 8765,
       "size_limit": 67108864,
       "log_level": "INFO",
@@ -80,10 +77,6 @@ CLIPIK - сервис для реализации общего буфера об
     }
   #+end_src
 
-*** Graphic Protocol (параметр =graphic_protocol=)
-   Если его не указывать в конфигурации, он будет определен исходя переданной опции
-   в cli, либо из наличия переменной окружения =WAYLAND_DISPLAY=
-
 * Переменные окружения
   Имеются только переменные окружения, за счет которых можно менять свойства:
 
@@ -95,16 +88,16 @@ CLIPIK - сервис для реализации общего буфера об
 
 * Обязательные утилиты (зависимости)
 ** Linux
-*** X11 (xorg)
+*** Общие (всегда работает с xorg)
     - ~xclip~
     - =clipnotify=
-*** Wayland
+*** Wayland (опционально, если есть wayland)
     - =wl-paste=
     - =wl-copy=
 ** MacOs (пока не поддерживается)
 ** Windows (пока не поддерживается)
 
-* TODO [2/7]
+* TODO [3/8]
   - [ ] Возможность регистрировать сервисы для подключения к удаленным сетями
   - [X] Регистрацию при подключении (ввод pin-кода/разрешенные хосты в конфиге)
   - [ ] Поддержка всех типов данных, в том числе при копировании из файловых менеджеров
@@ -112,3 +105,4 @@ CLIPIK - сервис для реализации общего буфера об
   - [ ] Поддержка Windows
   - [ ] Фоновая загрузка больших файлов с ожиданием вставки (до конца загрузки)
   - [X] Поддержка передачи данных не только через переменные окружения, но и через опции и конфиги
+  - [X] Одновременная работа на wayland и x11 без переключения

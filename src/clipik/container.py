@@ -1,9 +1,9 @@
+import os
 import shutil
 import socket
 from typing import TYPE_CHECKING
 from websockets import ServerConnection
-from clipik.enum import GraphicProtocol
-from clipik.types import SetClipboardFn, ListenClipboardFn, IsDuplicateClipboardFn
+from clipik.types import SetClipboardFn, ListenClipboardFn
 from clipik.exception import InitializationError
 from clipik.zeroconf import get_zeroconf
 
@@ -26,7 +26,6 @@ class Container:
     config: "Config"
     set_clipboard: SetClipboardFn
     listen_clipboard: ListenClipboardFn
-    is_duplicate_clipboard: IsDuplicateClipboardFn
     required_utils: list[str] = []
     clients: set[ServerConnection] = set()
 
@@ -35,7 +34,6 @@ class Container:
         config: "Config",
         set_clipboard: SetClipboardFn,
         listen_clipboard: ListenClipboardFn,
-        is_duplicate_clipboard: IsDuplicateClipboardFn,
     ):
         self.service_name = f"clipik-{socket.gethostname()}"
 
@@ -49,20 +47,19 @@ class Container:
         self.config = config
         self.set_clipboard = set_clipboard
         self.listen_clipboard = listen_clipboard
-        self.is_duplicate_clipboard = is_duplicate_clipboard
 
         required_utils: list[str] = []
 
-        if config.graphic_protocol == GraphicProtocol.WAYLAND:
+        if os.getenv('WAYLAND_DISPLAY', default=None):
             required_utils = required_utils + [
                 'wl-paste',
                 'wl-copy',
             ]
-        else:
-            required_utils = required_utils + [
-                'xclip',
-                'clipnotify'
-            ]
+
+        required_utils = required_utils + [
+            'xclip',
+            'clipnotify',
+        ]
 
         self.required_utils = required_utils
         self.raise_required_utils_is_needed()

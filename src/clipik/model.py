@@ -2,7 +2,6 @@ import ipaddress
 import os
 from typing import Literal
 from pydantic import BaseModel, field_validator
-from clipik.enum import GraphicProtocol
 
 
 class ClipboardContent(BaseModel):
@@ -45,7 +44,6 @@ class LoseServiceEvent(BaseModel):
 
 
 class Config(BaseModel):
-    graphic_protocol: GraphicProtocol | None = None
     port: int | None = None
     size_limit: int | None = None
     log_level: str | None = None
@@ -70,9 +68,6 @@ class Config(BaseModel):
         return value
 
     def resolve_properties(self) -> None:
-        if not self.graphic_protocol:
-            self.graphic_protocol = GraphicProtocol.detect()
-
         if not self.log_level:
             self.log_level = os.getenv('CLIPIK_LOG_LEVEL', default='INFO')
 

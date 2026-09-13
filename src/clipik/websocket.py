@@ -73,14 +73,6 @@ async def _ws_handler(
                 content = ClipboardContent(mime=event.mime, data=event.data)
 
                 logger.debug('Setting clipboard from [{}]: [{}]', peer, content.mime)
-                if await container.is_duplicate_clipboard(content):
-                    logger.debug(
-                        'Clipboard from [{}] is duplicate: [{}]',
-                        peer,
-                        content.mime
-                    )
-                    continue
-
                 set_clipboard_tasks.append(asyncio.create_task(container.set_clipboard(content)))
                 logger.debug('Set clipboard from [{}]: [{}]', peer, content.mime)
             except Exception as e:
@@ -177,15 +169,6 @@ async def connect_to_server(
                         url,
                         event.mime,
                     )
-                    if await container.is_duplicate_clipboard(content):
-                        logger.debug(
-                            'Clipboard from server [{}] is duplicate, mime [{}]',
-                            url,
-                            event.mime,
-                        )
-
-                        continue
-
                     await container.set_clipboard(content)
                     logger.debug(
                         'Set clipboard from server [{}], mime [{}]',

@@ -32,17 +32,15 @@ clipik
 окружения.
 
 ```
-$ clipik --help
-usage: clipik [-h] [--config PATH] [--graphic-protocol {x11,wayland}] [--port PORT] [--size-limit BYTES]
-              [--handshake-timeout SECONDS] [--log-level LEVEL]
+$ clipik -h
+usage: clipik [-h] [--config PATH] [--port PORT] [--size-limit BYTES] [--handshake-timeout SECONDS]
+              [--log-level LEVEL]
 
 Synchronize clipboard by network
 
 options:
   -h, --help            show this help message and exit
   --config PATH         Force choice config file
-  --graphic-protocol {x11,wayland}
-                        force choice graphic protocol, elsewhere set from env WAYLAND_DISPLAY
   --port PORT           WebSocket TCP-port
   --size-limit BYTES    Max size WS-messages and stdout from wayland/x11 clipboard
   --handshake-timeout SECONDS
@@ -72,7 +70,6 @@ options:
 
 ``` json
 {
-  "graphic_protocol": "wayland",
   "port": 8765,
   "size_limit": 67108864,
   "log_level": "INFO",
@@ -84,12 +81,6 @@ options:
   ]
 }
 ```
-
-### Graphic Protocol (параметр `graphic_protocol`)
-
-Если его не указывать в конфигурации, он будет определен исходя
-переданной опции в cli, либо из наличия переменной окружения
-`WAYLAND_DISPLAY`
 
 # Переменные окружения
 
@@ -109,12 +100,12 @@ options:
 
 ## Linux
 
-### X11 (xorg)
+### Общие (всегда работает с xorg)
 
 - `xclip`
 - `clipnotify`
 
-### Wayland
+### Wayland (опционально, если есть wayland)
 
 - `wl-paste`
 - `wl-copy`
@@ -123,7 +114,7 @@ options:
 
 ## Windows (пока не поддерживается)
 
-# <span class="todo TODO">TODO</span> \[2/7\]
+# <span class="todo TODO">TODO</span> \[3/8\]
 
 - [ ] Возможность регистрировать сервисы для подключения к удаленным
   сетями
@@ -137,3 +128,4 @@ options:
   загрузки)
 - [x] Поддержка передачи данных не только через переменные окружения, но
   и через опции и конфиги
+- [x] Одновременная работа на wayland и x11 без переключения

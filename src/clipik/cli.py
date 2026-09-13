@@ -1,11 +1,13 @@
+import os
+import sys
 import asyncio
 import argparse
 from loguru import logger
 from pathlib import Path
+from clipik.exception import InitializationError
 from clipik.zeroconf import register_service, unregister_service, discover_services
 from clipik.websocket import broadcast_local, connect_to_server, start_websocket_server
 from clipik.config import write_fresh_config, read_config_file
-from clipik.enum import GraphicProtocol
 from clipik.logger import initialize_logger
 from clipik.container import Container
 
@@ -64,16 +66,6 @@ def _build_parser() -> argparse.ArgumentParser:
         default=Path.home() / '.config' / 'clipik' / 'config.json',
         metavar='PATH',
         help='Force choice config file',
-    )
-
-    parser.add_argument(
-        '--graphic-protocol',
-        dest='graphic_protocol',
-        type=GraphicProtocol,
-        choices=list(GraphicProtocol),
-        default=None,
-        metavar='{x11,wayland}',
-        help='force choice graphic protocol, elsewhere set from env WAYLAND_DISPLAY'
     )
 
     parser.add_argument(
@@ -146,10 +138,14 @@ def main():
     for key, value in config.model_dump().items():
         logger.info('Config [{}]=[{}]', key, value)
 
-    if config.graphic_protocol == GraphicProtocol.X11:
-        from clipik.clipboard.x11 import set_clipboard, listen_clipboard, is_duplicate_clipboard
-    else:
-        from clipik.clipboard.wayland import set_clipboard, listen_clipboard, is_duplicate_clipboard
+    if os.name == 'nt': # Windows
+        logger.error('Windows [{}] does not supports', os.name)
+        return
+    elif sys.platform == 'darwin': # macOS
+        logger.error('MacOS [{}] does not supports', sys.platform)
+        return
+    else: # Linux / Unix
+        from clipik.clipboard.linux import set_clipboard, listen_clipboard
 
     logger.info('Initialize container')
 
@@ -158,7 +154,6 @@ def main():
             config=config,
             set_clipboard=set_clipboard,
             listen_clipboard=listen_clipboard,
-            is_duplicate_clipboard=is_duplicate_clipboard,
         )
     except Exception as e:
         logger.critical('Error [{}] container initialization', e)

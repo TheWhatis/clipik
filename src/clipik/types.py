@@ -8,4 +8,3 @@ if TYPE_CHECKING:
 
 SetClipboardFn: TypeAlias = Callable[["ClipboardContent"], Awaitable[None]]
 ListenClipboardFn: TypeAlias = Callable[[int], AsyncGenerator["ClipboardContent", None]]
-IsDuplicateClipboardFn: TypeAlias = Callable[["ClipboardContent"], Awaitable[bool]]
