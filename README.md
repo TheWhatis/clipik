@@ -85,7 +85,7 @@ options:
 }
 ```
 
-### Graphic Protocol (параметр graphic<sub>protocol</sub>)
+### Graphic Protocol (параметр `graphic_protocol`)
 
 Если его не указывать в конфигурации, он будет определен исходя
 переданной опции в cli, либо из наличия переменной окружения
