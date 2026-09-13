@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 from collections.abc import AsyncGenerator
 from clipik.model import LoseServiceEvent, NewServiceEvent
-from zeroconf import ServiceInfo, Zeroconf, ServiceListener
+from zeroconf import IPVersion, InterfaceChoice, ServiceInfo, Zeroconf, ServiceListener
 
 
 if TYPE_CHECKING:
@@ -40,19 +40,20 @@ class _ServiceListener(ServiceListener):
         info = zc.get_service_info(type_, name)
 
         if info and info.addresses:
-            ip = _addr_to_str(info.addresses[0])
+            for packed in info.addresse:
+                ip = _addr_to_str(packed)
 
-            asyncio.run_coroutine_threadsafe(
-                self.queue.put(NewServiceEvent(
-                    name=name,
-                    ip=ip,
-                    host=ip,
-                    port=info.port,
-                )),
-                self.loop,
-            )
+                asyncio.run_coroutine_threadsafe(
+                    self.queue.put(NewServiceEvent(
+                        name=name,
+                        ip=ip,
+                        host=ip,
+                        port=info.port,
+                    )),
+                    self.loop,
+                )
 
-            logger.debug('New service [{}] at [{}:{}]', name, ip, info.port)
+                logger.debug('New service [{}] at [{}:{}]', name, ip, info.port)
 
     def remove_service(self, zc: Zeroconf, type_, name):
         if name == self.own_name:
@@ -62,26 +63,30 @@ class _ServiceListener(ServiceListener):
         info = zc.get_service_info(type_, name)
 
         if info and info.addresses:
-            ip = _addr_to_str(info.addresses[0])
+            for packed in info.addresses:
+                ip = _addr_to_str(info.addresses[0])
 
-            asyncio.run_coroutine_threadsafe(
-                self.queue.put(LoseServiceEvent(
-                    name=name,
-                    ip=ip,
-                    host=ip,
-                    port=info.port,
-                )),
-                self.loop
-            )
+                asyncio.run_coroutine_threadsafe(
+                    self.queue.put(LoseServiceEvent(
+                        name=name,
+                        ip=ip,
+                        host=ip,
+                        port=info.port,
+                    )),
+                    self.loop
+                )
 
-            logger.debug('Lose service [{}]', name)
+                logger.debug('Lose service [{}]', name)
 
     def update_service(self, zc: Zeroconf, type_, name):
         pass
 
 
 def get_zeroconf() -> Zeroconf:
-    return Zeroconf()
+    return Zeroconf(
+        interfaces=InterfaceChoice.All,
+        ip_version=IPVersion.All,
+    )
 
 
 def _all_ipv4_addresses() -> list[bytes]:
