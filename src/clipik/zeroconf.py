@@ -107,7 +107,7 @@ def unregister_service(container: "Container"):
 
 
 async def discover_services(
-    container: Container
+    container: "Container"
 ) -> AsyncGenerator[NewServiceEvent | LoseServiceEvent, None]:
     loop = asyncio.get_running_loop()
     queue = asyncio.Queue()
