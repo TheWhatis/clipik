@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from websockets import ServerConnection
 from clipik.types import SetClipboardFn, ListenClipboardFn
 from clipik.exception import InitializationError
-from clipik.zeroconf import get_zeroconf
 
 
 if TYPE_CHECKING:
@@ -39,7 +38,6 @@ class Container:
 
     service_name: str
     service_type: str = '_clipik._tcp.local.'
-    local_ip: str
     zeroconf: "Zeroconf"
 
     config: "Config"
@@ -56,11 +54,6 @@ class Container:
         listen_clipboard: ListenClipboardFn,
     ):
         self.service_name = f"clipik-{socket.gethostname()}"
-
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('8.8.8.8', 80))
-        self.local_ip = s.getsockname()[0]
-        s.close()
 
         self.config = config
         self.zeroconf = zeroconf

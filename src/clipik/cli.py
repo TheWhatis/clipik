@@ -179,6 +179,7 @@ def main():
         return
 
     try:
+        logger.info('Version [{}]', container.version)
         logger.info('Runnine asyncio main entrypoint [_main]')
         asyncio.run(_main(container))
     except KeyboardInterrupt:

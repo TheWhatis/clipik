@@ -1,5 +1,5 @@
 import os
-import socket
+import ipaddress
 import asyncio
 from typing import TYPE_CHECKING
 from loguru import logger
@@ -7,8 +7,17 @@ from collections.abc import AsyncGenerator
 from clipik.model import LoseServiceEvent, NewServiceEvent
 from zeroconf import ServiceInfo, Zeroconf, ServiceListener
 
+
 if TYPE_CHECKING:
     from clipik.container import Container
+
+
+def _addr_to_str(packed: bytes) -> str:
+    if len(packed) == 4:
+        return str(ipaddress.IPv4Address(packed))
+    if len(packed) == 16:
+        return str(ipaddress.IPv6Address(packed))
+    raise ValueError(f'Unexpected address length: {len(packed)}')
 
 
 class _ServiceListener(ServiceListener):
@@ -21,25 +30,16 @@ class _ServiceListener(ServiceListener):
         self.queue = queue
         self.loop = loop
         self.container = container
+        self.own_name = f"{container.service_name}.{container.service_type}"
 
     def add_service(self, zc: Zeroconf, type_, name):
+        if name == self.own_name:
+            return
+
         info = zc.get_service_info(type_, name)
 
         if info and info.addresses:
-            ip = socket.inet_ntoa(info.addresses[0])
-
-            if ip.startswith('127.'):
-                return
-
-            if ip == self.container.local_ip:
-                logger.debug(
-                    'Local service registered: [{}] at [{}:{}]',
-                    name,
-                    ip,
-                    info.port
-                )
-
-                return
+            ip = _addr_to_str(info.addresses[0])
 
             asyncio.run_coroutine_threadsafe(
                 self.queue.put(NewServiceEvent(
@@ -54,13 +54,13 @@ class _ServiceListener(ServiceListener):
             logger.debug('New service [{}] at [{}:{}]', name, ip, info.port)
 
     def remove_service(self, zc: Zeroconf, type_, name):
+        if name == self.own_name:
+            return
+
         info = zc.get_service_info(type_, name)
 
         if info and info.addresses:
-            ip = socket.inet_ntoa(info.addresses[0])
-
-            if ip.startswith('127.'):
-                return
+            ip = _addr_to_str(info.addresses[0])
 
             asyncio.run_coroutine_threadsafe(
                 self.queue.put(LoseServiceEvent(
@@ -83,19 +83,19 @@ def get_zeroconf() -> Zeroconf:
 
 
 def register_service(container: "Container"):
-    INFO = ServiceInfo(
+    info = ServiceInfo(
         container.service_type,
         f"{container.service_name}.{container.service_type}",
-        addresses=[socket.inet_aton(container.local_ip)],
+        addresses=[],
         port=container.config.port,
         properties={'version': container.version},
     )
 
-    container.zeroconf.register_service(INFO)
+    container.zeroconf.register_service(info)
+
     logger.info(
-        'Registered service: [{}] at [{}:{}]',
+        'Registered service: [{}] at [{}] port in all available interfaces',
         container.service_name,
-        container.local_ip,
         container.config.port
     )
 
