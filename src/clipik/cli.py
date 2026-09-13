@@ -38,9 +38,9 @@ async def _discover(container: Container):
 
         if event.event == 'lose_service' and event.name in _SERVER_TASKS:
             task = _SERVER_TASKS[event.name]
-            del _SERVER_TASKS[event.name]
             task.cancel()
             _AWAITING_TASKS.append(asyncio.create_task(_await_task(task)))
+            del _SERVER_TASKS[event.name]
 
 
 async def _main(container: Container):
@@ -58,7 +58,7 @@ async def _main(container: Container):
     finally:
         unregister_service(container)
 
-        for task in _SERVER_TASKS:
+        for _, task in _SERVER_TASKS.items():
             task.cancel()
             _AWAITING_TASKS.append(task)
 

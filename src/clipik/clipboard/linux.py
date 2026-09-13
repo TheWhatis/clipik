@@ -65,8 +65,7 @@ async def _write_data_wayland(mime: str, data: bytes):
             )
         else:
             logger.info(
-                'Successfully pasted [{}] ({} bytes) to clipboard wl-copy --type [{}] --paste-once',
-                data[:99],
+                'Successfully pasted ({} bytes) to clipboard wl-copy --type [{}] --paste-once',
                 len(data),
                 mime
             )
@@ -102,7 +101,7 @@ async def _listen_clipboard_wayland(size_limit: int) -> AsyncGenerator[Clipboard
         except Exception as e:
             logger.error('wayland: wl-paste --watch read error: [{}]', e)
 
-        logger.debug('wayland: wl-paste watch line: [{}] ({} bytss)', line[:99], len(line))
+        logger.debug('wayland: wl-paste watch line: ({} bytss)', len(line))
 
         if not line or line == b'\n':
             if process.returncode is not None:
