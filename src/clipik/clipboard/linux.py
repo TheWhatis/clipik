@@ -98,7 +98,7 @@ async def _get_types_wayland() -> list[str]:
 
 async def _read_data_wayland(mime: str) -> bytes:
     proc = await asyncio.create_subprocess_exec(
-        'wl-paste', '--type', mime,
+        'wl-paste', '--no-newline', '--type', mime,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -106,7 +106,7 @@ async def _read_data_wayland(mime: str) -> bytes:
     stdout, stderr = await proc.communicate()
 
     if stderr:
-        logger.warning('wayland: wl-paste --type [{}] stderr: [{}]', mime, stderr.decode())
+        logger.warning('wayland: wl-paste --no-newline --type [{}] stderr: [{}]', mime, stderr.decode())
 
     return stdout
 
