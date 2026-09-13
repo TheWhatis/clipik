@@ -1,3 +1,4 @@
+import socket
 import ipaddress
 import asyncio
 from typing import TYPE_CHECKING
@@ -83,7 +84,38 @@ def get_zeroconf() -> Zeroconf:
     return Zeroconf()
 
 
+def _all_ipv4_addresses() -> list[bytes]:
+    """Все не-loopback IPv4 адреса машины, в packed виде."""
+    addrs: list[bytes] = []
+
+    # через hostname
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith('127.'):
+                addrs.append(socket.inet_aton(ip))
+    except OSError:
+        pass
+
+    # через connect к приватному адресу (без интернета)
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('10.255.255.255', 1))
+        ip = s.getsockname()[0]
+        s.close()
+        if not ip.startswith('127.'):
+            packed = socket.inet_aton(ip)
+            if packed not in addrs:
+                addrs.append(packed)
+    except OSError:
+        pass
+
+    return addrs
+
+
 def register_service(container: "Container"):
+    addresses = _all_ipv4_addresses()
+
     info = ServiceInfo(
         container.service_type,
         f"{container.service_name}.{container.service_type}",
