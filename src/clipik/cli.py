@@ -24,7 +24,7 @@ async def _discover(container: Container):
     async for event in discover_services(container):
         if event.event == 'new_service':
             if not container.config.is_ip_allowed(event.ip):
-                logger.warning('Ip [{}] is not allowed, stop connecting to servce', event.ip)
+                logger.warning('Ip [{}] is not allowed, stop connecting to service', event.ip)
             else:
                 _SERVER_TASKS[event.name] = asyncio.create_task(
                     connect_to_server(
