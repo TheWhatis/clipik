@@ -3,9 +3,7 @@ import shutil
 import asyncio
 from pathlib import Path
 from asyncio.subprocess import Process
-import base64
 from collections.abc import AsyncGenerator
-import subprocess
 from clipik.model import ClipboardContent
 from clipik.logger import logger
 
