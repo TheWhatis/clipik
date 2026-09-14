@@ -206,7 +206,7 @@ async def _listen_clipboard_wayland(size_limit: int) -> AsyncGenerator[Clipboard
 
         yield ClipboardContent(
             mime=_sanitize_mime(chosen),
-            data=base64.b64encode(raw).decode(),
+            data=raw,
         )
 
 
@@ -223,7 +223,7 @@ async def _is_duplicate_clipboard_wayland(content: ClipboardContent) -> bool:
     for t in types:
         if _sanitize_mime(t) == sanitized:
             raw = await _read_data_wayland(t)
-            return base64.b64encode(raw).decode() == content.data
+            return raw == content.data
 
     return False
 
@@ -238,12 +238,7 @@ async def _set_clipboard_wayland(content: ClipboardContent):
         logger.warning('Received wayland clipboard content is duplicate')
         return
 
-    raw: bytes = content.data
-
-    if isinstance(content.data, str):
-        raw = base64.b64decode(content.data)
-
-    await _write_data_wayland(content.mime, raw)
+    await _write_data_wayland(content.mime, content.data)
 
 
 def _find_x_displays() -> list[str]:
@@ -382,7 +377,7 @@ async def _x11_has_content(display: str, content: ClipboardContent) -> bool:
     if raw is None:
         return False
 
-    return base64.b64encode(raw).decode() == content.data
+    return raw == content.data
 
 
 async def _x11_pick_target(display: str) -> tuple[str, str] | None:
@@ -418,6 +413,7 @@ async def _listen_one_x11(
                 stderr=asyncio.subprocess.DEVNULL,
                 env=_x_env(display),
             )
+
             await notify.wait()
         except OSError as e:
             logger.error('x11 [{}]: clipnotify failed: [{}]', display, e)
@@ -444,7 +440,7 @@ async def _listen_one_x11(
 
         yield ClipboardContent(
             mime=mime,
-            data=base64.b64encode(raw).decode(),
+            data=raw,
         )
 
 
@@ -529,12 +525,6 @@ async def _set_clipboard_x11(content: ClipboardContent):
         return
 
     raw = content.data
-    if isinstance(content.data, str):
-        try:
-            raw = base64.b64decode(content.data)
-        except Exception as e:
-            logger.error('x11: base64 decode failed: [{}]', e)
-            return
 
     # отбираем только живые, и только те, где ещё нет этого контента
     need_write: list[str] = []

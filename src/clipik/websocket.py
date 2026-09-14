@@ -1,4 +1,3 @@
-import os
 import asyncio
 import websockets
 from loguru import logger
@@ -9,6 +8,8 @@ from clipik.model import (
     HandshakeEvent,
     HandshakeAckEvent,
     ClipboardEvent,
+    event_to_bytes,
+    event_from_bytes,
 )
 
 
@@ -39,7 +40,7 @@ async def _ws_handler(
             return
 
         try:
-            event = HandshakeEvent.model_validate_json(msg)
+            event = event_from_bytes(msg)
         except Exception as e:
             logger.warning('Invalid handshake [{}]', msg)
             await websocket.close(code=1007, reason='Invalid handshake')
@@ -55,7 +56,7 @@ async def _ws_handler(
             version=container.version,
         )
 
-        await websocket.send(ack_event.model_dump_json())
+        await websocket.send(event_to_bytes(ack_event))
     except Exception as e:
         logger.warning('Handshake failed: [{}]', e)
         return
@@ -69,7 +70,7 @@ async def _ws_handler(
     try:
         async for msg in websocket:
             try:
-                event = ClipboardEvent.model_validate_json(msg)
+                event = event_from_bytes(msg)
                 content = ClipboardContent(mime=event.mime, data=event.data)
 
                 logger.debug('Setting clipboard from [{}]: [{}]', peer, content.mime)
@@ -109,10 +110,10 @@ async def broadcast_local(container: Container):
 
         event = ClipboardEvent(
             mime=content.mime,
-            data=content.data if isinstance(content.data, str) else content.data,
+            data=content.data,
         )
 
-        payload = event.model_dump_json()
+        payload = event_to_bytes(event)
 
         try:
             if container.clients:
@@ -146,10 +147,10 @@ async def connect_to_server(
                 version=container.version,
             )
 
-            await ws.send(event.model_dump_json())
+            await ws.send(event_to_bytes(event))
 
             msg = await asyncio.wait_for(ws.recv(), timeout=container.config.handshake_timeout)
-            ack = HandshakeAckEvent.model_validate_json(msg)
+            ack = event_from_bytes(msg)
 
             if ack.protocol != container.protocol:
                 logger.warning('Invalid protocol [{}] for [{}]', ack.protocol, host)
@@ -159,7 +160,7 @@ async def connect_to_server(
 
             async for msg in ws:
                 try:
-                    event = ClipboardEvent.model_validate_json(msg)
+                    event = event_from_bytes(msg)
 
                     content = ClipboardContent(
                         mime=event.mime,

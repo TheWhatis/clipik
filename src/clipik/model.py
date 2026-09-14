@@ -1,3 +1,4 @@
+import msgpack
 import ipaddress
 import os
 from typing import Literal
@@ -6,7 +7,7 @@ from pydantic import BaseModel, field_validator
 
 class ClipboardContent(BaseModel):
     mime: str
-    data: str | bytes
+    data: bytes
 
 
 class HandshakeEvent(BaseModel):
@@ -24,7 +25,7 @@ class HandshakeAckEvent(BaseModel):
 class ClipboardEvent(BaseModel):
     event: Literal['clipboard'] = 'clipboard'
     mime: str
-    data: str
+    data: bytes
 
 
 class NewServiceEvent(BaseModel):
@@ -95,3 +96,27 @@ class Config(BaseModel):
                     return True
 
         return False
+
+
+AnyEvent = HandshakeEvent | HandshakeAckEvent | ClipboardEvent
+
+
+_EVENT_BY_TYPE = {
+    'handshake': HandshakeEvent,
+    'handshake_ack': HandshakeAckEvent,
+    'clipboard': ClipboardEvent,
+}
+
+
+def event_to_bytes(event: AnyEvent) -> bytes:
+    return msgpack.packb(event.model_dump(), use_bin_type=True)
+
+
+def event_from_bytes(buf: bytes) -> AnyEvent:
+    payload = msgpack.unpackb(buf, raw=False)
+    cls = _EVENT_BY_TYPE.get(payload.get('event'))
+
+    if cls is None:
+        raise ValueError(f"Unknown event type: [{payload.get('type')!r}]")
+
+    return cls(**payload)
