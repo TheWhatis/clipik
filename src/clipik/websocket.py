@@ -231,7 +231,7 @@ async def connect_to_server(
                         container.version
                     )
 
-                    await websocket.close(code=1002, reason=f"Version must be more or equal {container.version}")
+                    await server.close(code=1002, reason=f"Version must be more or equal {container.version}")
                     return
 
                 logger.info('Connected to server [{}]', url)

@@ -4,6 +4,7 @@ import psutil
 import asyncio
 import argparse
 import ipaddress
+from loguru import logger
 from packaging.version import Version
 from .model import Config, Clipboard, ClipboardContent
 from .database import get_history, get_from_history
@@ -50,7 +51,7 @@ def supports_versions(event_version: str, current_version) -> bool:
 
 
 def _raw_content(content: Clipboard):
-    print(f"[{content.id}] [{content.hostname}] {content.data[:99]} ({len(content.data)} bytes)")
+    print(f"[{content.id}] {content.hostname} {content.data[:99]} ({len(content.data)} bytes)")
 
 
 def list_contents(container: Container, args: argparse.Namespace):
@@ -66,7 +67,6 @@ def list_contents(container: Container, args: argparse.Namespace):
 
     for content in history:
         _raw_content(content)
-        return
 
 
 def first_contents(container: Container, args: argparse.Namespace):

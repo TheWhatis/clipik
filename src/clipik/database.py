@@ -1,12 +1,17 @@
 import sqlite3
-import asyncio
 import hashlib
+from loguru import logger
 from .model import Clipboard, Config
 
 
 def initialize_database(config: Config) -> sqlite3.Connection:
     config.database.parent.mkdir(parents=True, exist_ok=True)
-    connection: sqlite3.Connection = sqlite3.connect(config.database)
+    connection: sqlite3.Connection = sqlite3.connect(
+        config.database,
+        check_same_thread=False,
+    )
+
+    connection.row_factory = sqlite3.Row
 
     connection.execute("PRAGMA journal_mode = WAL")   # читатели не блокируют писателя
     connection.execute("PRAGMA synchronous = NORMAL") # быстрее, безопасно в WAL
@@ -18,7 +23,7 @@ def initialize_database(config: Config) -> sqlite3.Connection:
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         mime       TEXT NOT NULL,
         data       BLOB NOT NULL,
-        data_hash  BLOG NOT NULL,
+        data_hash  BLOB NOT NULL,
         hostname   TEXT NOT NULL,
         ip         TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -39,19 +44,22 @@ def initialize_database(config: Config) -> sqlite3.Connection:
 
 
 def _data_hash(data: bytes) -> bytes:
-    return hashlib.sha256(data)
+    return hashlib.sha256(data).digest()
 
 
 def add_to_history(connection: sqlite3.Connection, content: Clipboard) -> int:
-    data_hash = _data_hash(content.data)
+    try:
+        data_hash = _data_hash(content.data)
 
-    cursor =  connection.execute(
-        "INSERT INTO history (mime, data, data_hash, hostname, ip) VALUES (?, ?, ?, ?, ?)",
-        (content.mime, content.data, data_hash, content.hostname, content.ip),
-    )
+        cursor =  connection.execute(
+            "INSERT INTO history (mime, data, data_hash, hostname, ip) VALUES (?, ?, ?, ?, ?)",
+            (content.mime, content.data, data_hash, content.hostname, content.ip),
+        )
 
-    connection.commit()
-    return cursor.lastrowid
+        connection.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        logger.error('Error while add to history: [{}]', e)
 
 
 def get_from_history(connection: sqlite3,Connection, id: int) -> Clipboard | None:
@@ -77,14 +85,17 @@ def has_by_data(connection: sqlite3.Connection, data: bytes) -> bool:
     return cursor.fetchone() is not None
 
 
-def get_history(connection: sqlite3.Connection, limit: int = 30, created_at_sort: str = 'DESC') -> list[Clipboard]:
+def get_history(
+    connection: sqlite3.Connection,
+    limit: int = 30,
+    created_at_sort: str = 'DESC'
+) -> list[Clipboard]:
     cursor = connection.execute(
         f"SELECT * FROM history ORDER BY created_at {created_at_sort} LIMIT ?",
         (limit,),
     )
 
     rows: list[sqlite3.Row] = cursor.fetchall()
-
     output: list[Clipboard] = []
 
     for row in rows:
