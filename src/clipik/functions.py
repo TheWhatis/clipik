@@ -101,7 +101,7 @@ async def paste_clipboard(container: Container, args: argparse.Namespace):
     clipboard = await asyncio.to_thread(
         get_from_history,
         container.db_connection,
-        args.id
+        args.id,
     )
 
     if not clipboard:

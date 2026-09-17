@@ -62,7 +62,7 @@ def add_to_history(connection: sqlite3.Connection, content: Clipboard) -> int:
         logger.error('Error while add to history: [{}]', e)
 
 
-def get_from_history(connection: sqlite3,Connection, id: int) -> Clipboard | None:
+def get_from_history(connection: sqlite3.Connection, id: int) -> Clipboard | None:
     cursor = connection.execute('SELECT * FROM history WHERE id = ?', (id,),)
     row: sqlite3.Row | None = cursor.fetchone()
 

@@ -239,7 +239,7 @@ def _main_client(container: Container):
         sys.exit(1)
 
 
-def _main_paste(container: Container):
+def _main_paste(container: Container, args: argparse.ArgumentParser):
     if os.name == 'nt': # Windows
         print(f"Windows [{os.uname}] does not supports")
         return
@@ -254,11 +254,12 @@ def _main_paste(container: Container):
         container.set_clipboard = set_clipboard_x11
 
     try:
-        asyncio.run(paste_clipboard(container))
+        asyncio.run(paste_clipboard(container, args))
     except KeyboardInterrupt:
         print("Bye-bye!!!", file=sys.stderr)
         sys.exit(130)
     except Exception as e:
+        raise e
         print(f"Error while paste clipboard [{e}]")
         sys.exit(1)
 
@@ -330,6 +331,7 @@ def main():
         return
 
     if args.command == 'paste':
-        _main_paste(container)
+        _main_paste(container, args)
+        return
 
-    parser.error('Command not pasted, write [server, client, list, first, last or paste], for details use --help')
+    parser.error('Command not passed, write [server, client, list, first, last or paste], for details use --help')
