@@ -2,15 +2,17 @@ import asyncio
 import websockets
 from loguru import logger
 from websockets.asyncio.server import ServerConnection
-from clipik.container import Container
-from clipik.model import (
-    ClipboardContent,
+from .container import Container
+from .model import (
+    Clipboard,
     HandshakeEvent,
     HandshakeAckEvent,
     ClipboardEvent,
     event_to_bytes,
     event_from_bytes,
 )
+from .database import add_to_history
+from .functions import is_ip_allowed, supports_versions
 
 
 async def _ws_handler(
@@ -20,7 +22,7 @@ async def _ws_handler(
     try:
         ip = websocket.remote_address[0]
 
-        if not container.config.is_ip_allowed(ip):
+        if not is_ip_allowed(container.config, ip):
             logger.warning('Client ip [{}] is not allowed', ip)
             await websocket.close(code=1008, reason='Ip is not allowed')
             return
@@ -28,27 +30,44 @@ async def _ws_handler(
         logger.warning('Error with check client ip [{}]', e)
         return
 
+    peer = websocket.remote_address[0]
+
     try:
         try:
             msg = await asyncio.wait_for(
                 websocket.recv(),
-                timeout=container.config.handshake_timeout
+                timeout=container.config.handshake_timeout,
             )
         except asyncio.TimeoutError:
-            logger.warning('Handshake timeout from [{}]', websocket.remote_address[0])
+            logger.warning('Handshake timeout from [{}]', peer)
             await websocket.close(code=1002, reason='Handshake timeout')
             return
 
         try:
-            event = event_from_bytes(msg)
+            event: HandshakeEvent = event_from_bytes(msg)
         except Exception as e:
             logger.warning('Invalid handshake [{}]', msg)
             await websocket.close(code=1007, reason='Invalid handshake')
             return
 
+        if event.event != 'handshake':
+            logger.warning('Invalid handshake event [{}]', event)
+            await websocket.close(code=1007, reason='Invalid handshake')
+            return
+
         if event.protocol != container.protocol:
             logger.warning('Invalid handshake protocol [{}]', event.protocol)
-            await websocket.close(code=1002, reason='Invalid handshake')
+            await websocket.close(code=1007, reason='Invalid protocol')
+            return
+
+        if not supports_versions(event.version, container.version):
+            logger.warning(
+                'Version does not supports [{}], current [{}]',
+                event.version,
+                container.version
+            )
+
+            await websocket.close(code=1002, reason=f"Version must be more or equal {container.version}")
             return
 
         ack_event = HandshakeAckEvent(
@@ -61,35 +80,45 @@ async def _ws_handler(
         logger.warning('Handshake failed: [{}]', e)
         return
 
-    container.clients.add(websocket)
-    peer = websocket.remote_address[0]
     logger.info('Client connected: [{}]', peer)
-
-    set_clipboard_tasks: list[asyncio.Task] = []
+    tasks: list[asyncio.Task] = []
 
     try:
         async for msg in websocket:
             try:
-                event = event_from_bytes(msg)
-                content = ClipboardContent(mime=event.mime, data=event.data)
+                event: ClipboardEvent = event_from_bytes(msg)
 
-                logger.debug('Setting clipboard from [{}]: [{}]', peer, content.mime)
-                set_clipboard_tasks.append(asyncio.create_task(container.set_clipboard(content)))
-                logger.debug('Set clipboard from [{}]: [{}]', peer, content.mime)
+                if event.event != 'clipboard':
+                    logger.warning('Invalid clipboard [{}] from [{}]', event, peer)
+                    await websocket.close(code=1007, reason='Invalid clipboard')
+                    return
+
+                hostname = event.hostname
+
+                if hostname == container.hostname:
+                    hostname = 'localhost'
+
+                clipboard = Clipboard(
+                    mime=event.mime,
+                    data=event.data,
+                    hostname=f"[{hostname}] [{event.session}]",
+                    ip=peer,
+                )
+
+                logger.debug('Save clipboard to history from [{}:{}]: [{}]', hostname, clipboard.ip, clipboard.mime)
+                tasks.append(asyncio.create_task(asyncio.to_thread(add_to_history, container.db_connection, clipboard)))
             except Exception as e:
                 logger.error('Error listen peer [{}]: [{}]', peer, e)
     except websockets.exceptions.ConnectionClosed:
         logger.info('Client disconnected: [{}]', peer)
     finally:
-        container.clients.remove(websocket)
-
-        for task in set_clipboard_tasks:
+        for task in tasks:
             task.cancel()
 
-        await asyncio.gather(*set_clipboard_tasks)
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
-async def start_websocket_server(container: Container):
+async def start_websocket_server(container: Container, ready: asyncio.Event | None = None):
     async def handler(websocket: ServerConnection):
         await _ws_handler(websocket, container)
 
@@ -100,37 +129,56 @@ async def start_websocket_server(container: Container):
         max_size=container.config.size_limit
     ):
         logger.info('Websocket server started on [{}]', container.config.port)
+        ready.set()
         await asyncio.Future()
 
 
-async def broadcast_local(container: Container):
-    async for content in container.listen_clipboard(container.config.size_limit):
-        if not content.data:
-            continue
+async def _broadcast_local(container: Container):
+    tasks: list[asyncio.Task] = []
 
-        event = ClipboardEvent(
-            mime=content.mime,
-            data=content.data,
-        )
+    try:
+        async for content in container.listen_clipboard(container.config.size_limit):
+            if not content.data:
+                continue
 
-        payload = event_to_bytes(event)
-
-        try:
-            if container.clients:
-                coros = []
-                for client in container.clients:
-                    coros.append(client.send(payload))
-
-                await asyncio.gather(*coros, return_exceptions=True)
-
-                logger.debug('Broadcasted to [{}] clients', len(container.clients))
-        except Exception as e:
-            logger.error(
-                'Error [{}] broadcasting to [{}] clients, mime [{}]',
-                e,
-                len(container.clients),
-                content.mime
+            event = ClipboardEvent(
+                mime=content.mime,
+                data=content.data,
+                hostname=container.hostname,
+                session=container.session,
             )
+
+            payload = event_to_bytes(event)
+
+            try:
+                if container.servers:
+                    logger.debug('Broadcasting to [{}] servers', len(container.servers))
+
+                    for server in container.servers:
+                        tasks.append(asyncio.create_task(server.send(payload)))
+            except Exception as e:
+                logger.error(
+                    'Error [{}] broadcasting to [{}] servers, mime [{}]',
+                    e,
+                    len(container.servers),
+                    content.mime
+                )
+    finally:
+        for task in tasks:
+            task.cancel()
+
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def _listen_server_messages(ws: ServerConnection):
+    ip = ws.remote_address[0]
+
+    async for msg in ws:
+        try:
+            event = event_from_bytes(msg)
+            logger.info('Received event [{}] from server [{}]', event, ip)
+        except Exception as e:
+            logger.warning('Error [{}] receiving from [{}]', e, ip)
 
 
 async def connect_to_server(
@@ -140,45 +188,75 @@ async def connect_to_server(
 ):
     url = f"ws://{host}:{port}"
 
+    logger.info('Trying connecting to server [{}]', url)
+
     try:
-        async with websockets.connect(url, max_size=container.config.size_limit) as ws:
-            event = HandshakeEvent(
-                protocol=container.protocol,
-                version=container.version,
-            )
+        async with websockets.connect(url, max_size=container.config.size_limit) as server:
+            container.servers.add(server)
 
-            await ws.send(event_to_bytes(event))
+            try:
+                event = HandshakeEvent(
+                    protocol=container.protocol,
+                    version=container.version,
+                )
 
-            msg = await asyncio.wait_for(ws.recv(), timeout=container.config.handshake_timeout)
-            ack = event_from_bytes(msg)
+                await server.send(event_to_bytes(event))
 
-            if ack.protocol != container.protocol:
-                logger.warning('Invalid protocol [{}] for [{}]', ack.protocol, host)
-                return
+                msg = await asyncio.wait_for(
+                    server.recv(),
+                    timeout=container.config.handshake_timeout
+                )
 
-            logger.info('Connected to server [{}]', url)
-
-            async for msg in ws:
                 try:
-                    event = event_from_bytes(msg)
-
-                    content = ClipboardContent(
-                        mime=event.mime,
-                        data=event.data,
-                    )
-
-                    logger.debug(
-                        'Setting clipboard from server [{}], mime [{}]',
-                        url,
-                        event.mime,
-                    )
-                    await container.set_clipboard(content)
-                    logger.debug(
-                        'Setted clipboard from server [{}], mime [{}]',
-                        url,
-                        event.mime,
-                    )
+                    ack: HandshakeAckEvent = event_from_bytes(msg)
                 except Exception as e:
-                    logger.error('Error from server [{}]: [{}]', url, e)
+                    logger.warning('Invalid ack [{}]', msg)
+                    await server.close(code=1007, reason='Invalid handshake')
+                    return
+
+                if ack.event != 'handshake_ack':
+                    logger.warning('Invalid ack event [{}]', ack)
+                    await server.close(code=1007, reason='Invalid ack')
+                    return
+
+                if ack.protocol != container.protocol:
+                    logger.warning('Invalid ack protocol [{}] for [{}]', ack.protocol, host)
+                    await server.close(code=1007, reason='Invalid protocol')
+                    return
+
+                if not supports_versions(ack.version, container.version):
+                    logger.warning(
+                        'Version does not supports [{}], current [{}]',
+                        ack.version,
+                        container.version
+                    )
+
+                    await websocket.close(code=1002, reason=f"Version must be more or equal {container.version}")
+                    return
+
+                logger.info('Connected to server [{}]', url)
+
+                await asyncio.gather(
+                    _listen_server_messages(server),
+                    _broadcast_local(container),
+                    return_exceptions=True,
+                )
+            finally:
+                container.servers.remove(server)
     except Exception as e:
-        logger.warning('Failed to connect [{}]. Error: [{}]', url, e)
+        logger.error('Failed to connect [{}]. Error: [{}]', url, e)
+
+
+async def disconnect_from_server(host: str, container: Container):
+    for server in container.servers:
+        ip = server.remote_address[0]
+
+        if ip != host:
+            continue
+
+        try:
+            logger.info('Disconnecting from server [{}]', ip)
+            container.servers.remove(server)
+            await server.close()
+        except Exception as e:
+            logger.error('Error disconnecting from server [{}]', ip)

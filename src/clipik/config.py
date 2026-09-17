@@ -1,17 +1,69 @@
+import os
+import sys
 import json
 from pathlib import Path
-from clipik.model import Config
+from .model import Config, ClientConfig
 
 
-def write_fresh_config(path: Path) -> bool:
+def _build_def_config(config: type[Config]) -> Config:
+    handshake_timeout = int(os.getenv('CLIPIK_HANDSHAKE_TIMEOUT', default=7))
+    size_limit = int(os.getenv('CLIPIK_SIZE_LIMIT', default=64 * 1024 * 1024))
+    log_level = os.getenv('CLIPIK_LOG_LEVEL', default='INFO')
+
+    log_dir = os.getenv('CLIPIK_LOG_DIR', default=None)
+
+    if log_dir: # Env CLIPIK_LOG_DIR
+        log_dir = Path(log_dir)
+    elif os.name == 'nt': # Windows
+        log_dir = Path(os.getenv('APPDATA', '~')) / 'clipik'
+    elif sys.platform == 'darwin':
+        log_dir = Path('~/Library/Appliction Support/Clipik').expanduser()
+    else: # Linux / Unix
+        log_dir = Path('~/.local/clipik').expanduser()
+
+    database = os.getenv('CLIPIK_DATABASE', default=None)
+
+    if database:
+        database = Path(database)
+    elif os.name == 'nt':
+        database = Path(os.getenv('APPDATA', '~')) / 'clipik' / 'clipik.db'
+    elif sys.platform == 'darwin':
+        database = Path('~/Library/Application Support/Clipik/clipik.db').expanduser()
+    else:
+        database = Path('~/.local/clipik/clipik.db').expanduser()
+
+    if issubclass(config, ClientConfig):
+        return config(
+            log_dir=log_dir,
+            log_level=log_level,
+            size_limit=size_limit,
+            handshake_timeout=handshake_timeout,
+            database=database,
+            interfaces=[],
+        )
+
+    port = int(os.getenv('CLIPIK_PORT', default=8765))
+
+    return config(
+        port=port,
+        log_dir=log_dir,
+        log_level=log_level,
+        size_limit=size_limit,
+        handshake_timeout=handshake_timeout,
+        database=database,
+        allowed_ips=[],
+        interfaces=[],
+    )
+
+
+def write_fresh_config(path: Path, config: type[Config]) -> bool:
     """Создает файл конфига с нуля, если его нет."""
     if path.exists():
         return False
 
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    config = Config()
-    config.resolve_properties()
+    config: Config = _build_def_config(config)
     payload = config.model_dump(
         mode='json',
         include=set([
@@ -19,6 +71,8 @@ def write_fresh_config(path: Path) -> bool:
             'size_limit',
             'log_level',
             'handshake_timeout',
+            'log_dir',
+            'interfaces',
         ]),
     )
 
@@ -28,19 +82,18 @@ def write_fresh_config(path: Path) -> bool:
 
 def read_config_file(
     path: Path,
-    overrides: dict | None = None,
+    config: type[Config],
+    overrides: dict[str, object] = {},
 ) -> Config:
     raw = path.read_text(encoding='utf-8')
-    config = Config.model_validate_json(raw)
 
-    merged: dict = config.model_dump()
+    def_config = _build_def_config(config)
+    merged = {**json.loads(raw), **(overrides if overrides else {})}
 
-    if overrides:
-        known = set(Config.model_fields)
-        for key, value in overrides.items():
-            if key in known and value is not None:
-                merged[key] = value
+    for key in config.model_fields:
+        if key in merged and merged[key]:
+            continue
 
-    config = Config(**merged)
-    config.resolve_properties()
-    return config
+        merged[key] = getattr(def_config, key)
+
+    return config(**merged)

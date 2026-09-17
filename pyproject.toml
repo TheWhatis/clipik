@@ -1,6 +1,6 @@
 [project]
 name = "clipik"
-version = "0.6.2"
+version = "0.7.0"
 description = "Synchronize clipboard buffer by network"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -8,12 +8,18 @@ dependencies = [
     "asyncio>=4.0.0",
     "loguru>=0.7.3",
     "msgpack>=1.2.2",
+    "packaging>=26.3",
+    "psutil>=7.2.2",
     "pydantic>=2.13.5",
     "typing>=3.10.0.0",
     "websockets>=17.1",
-    "zeroconf>=0.151.3",
 ]
 license = "Unlicense"
+
+[project.optional-dependencies]
+linux = [
+    "zeroconf>=0.151.3",
+]
 
 [project.scripts]
 clipik = "clipik:main"
@@ -24,6 +30,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "clipik[linux]",
     "basedpyright>=1.40.0",
     "epc>=0.0.5",
     "six>=1.17.0",
@@ -34,3 +41,6 @@ dev = [
 [project.urls]
 Homepage = "https://gitflic.ru/project/kurilka/clipik"
 Github = "https://github.com/TheWhatis/clipik"
+
+[tool.uv.sources]
+clipik = { workspace = true }

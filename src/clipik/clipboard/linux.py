@@ -1,17 +1,11 @@
 import os
 import shutil
 import asyncio
+from loguru import logger
 from pathlib import Path
 from asyncio.subprocess import Process
 from collections.abc import AsyncGenerator
-from clipik.model import ClipboardContent
-from clipik.logger import logger
-
-
-_HAS_WAYLAND = os.getenv('WAYLAND_DISPLAY', default=False)
-
-if _HAS_WAYLAND:
-    _HAS_WAYLAND=True
+from ..model import ClipboardContent
 
 
 # X11-атом -> MIME
@@ -109,7 +103,7 @@ async def _read_data_wayland(mime: str) -> bytes:
     return stdout
 
 
-async def _write_data_wayland(mime: str, data: bytes):
+async def _write_data_wayland(mime: str, data: bytes) -> bool:
     mime = _sanitize_mime(mime)
 
     try:
@@ -124,8 +118,8 @@ async def _write_data_wayland(mime: str, data: bytes):
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
-            start_new_session=True,
         )
+
         proc.stdin.write(data)
         await proc.stdin.drain()
         proc.stdin.close()
@@ -136,8 +130,10 @@ async def _write_data_wayland(mime: str, data: bytes):
             pass
 
         logger.info('wayland: wrote [{}] bytes as [{}]', len(data), mime)
+        return True
     except Exception as e:
         logger.error('wayland: failed to write data: [{}]', e)
+        return False
 
 
 async def _process_watch_wayland(size_limit: int) -> Process:
@@ -154,7 +150,7 @@ async def _process_watch_wayland(size_limit: int) -> Process:
             continue
 
 
-async def _listen_clipboard_wayland(size_limit: int) -> AsyncGenerator[ClipboardContent, None]:
+async def listen_clipboard_wayland(size_limit: int) -> AsyncGenerator[ClipboardContent, None]:
     logger.debug('Started listen_clipboard wayland')
     process = await _process_watch_wayland(size_limit)
 
@@ -208,53 +204,14 @@ async def _listen_clipboard_wayland(size_limit: int) -> AsyncGenerator[Clipboard
         )
 
 
-async def _is_duplicate_clipboard_wayland(content: ClipboardContent) -> bool:
-    if not content.data:
-        return False
-
-    types = await _get_types_wayland()
-    if not types:
-        return False
-
-    sanitized = _sanitize_mime(content.mime)
-
-    for t in types:
-        if _sanitize_mime(t) == sanitized:
-            raw = await _read_data_wayland(t)
-            return raw == content.data
-
-    return False
-
-
-async def _set_clipboard_wayland(content: ClipboardContent):
+async def set_clipboard_wayland(content: ClipboardContent) -> bool:
     logger.debug('Executing set_clipboard')
+
     if not content.data:
         logger.warning('Empty content.data')
-        return
+        return False
 
-    if await _is_duplicate_clipboard_wayland(content):
-        logger.warning('Received wayland clipboard content is duplicate')
-        return
-
-    await _write_data_wayland(content.mime, content.data)
-
-
-def _find_x_displays() -> list[str]:
-    """Все X-серверы по сокетам /tmp/.X11-unix/X*."""
-    sock_dir = Path('/tmp/.X11-unix')
-    if not sock_dir.is_dir():
-        return []
-
-    displays: list[str] = []
-    for entry in sock_dir.iterdir():
-        name = entry.name
-        if name.startswith('X') and name[1:].isdigit():
-            displays.append(f":{name[1:]}")
-    return displays
-
-
-def _x_env(display: str) -> dict[str, str]:
-    return {**os.environ, 'DISPLAY': display}
+    return await _write_data_wayland(content.mime, content.data)
 
 
 def _x11_mime_for(target: str) -> str | None:
@@ -282,13 +239,11 @@ async def _x11_alive(display: str) -> bool:
     if cached is not None and (now - cached) < _ALIVE_TTL:
         return True
 
-    env = _x_env(display)
     try:
         proc = await asyncio.create_subprocess_exec(
             'xdpyinfo',
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
-            env=env,
         )
         await asyncio.wait_for(proc.wait(), timeout=2)
         alive = proc.returncode == 0
@@ -310,7 +265,6 @@ async def _x11_targets(display: str) -> list[str]:
             'xclip', '-o', '-selection', 'clipboard', '-t', 'TARGETS',
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
-            env=_x_env(display),
         )
 
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=2)
@@ -327,38 +281,12 @@ async def _x11_read(display: str, target: str) -> bytes | None:
             'xclip', '-o', '-selection', 'clipboard', '-t', target,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
-            env=_x_env(display),
         )
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
         return stdout or None
     except (asyncio.TimeoutError, OSError):
         return None
 
-
-async def _x11_write(display: str, target: str, data: bytes) -> bool:
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            'xclip', '-selection', 'clipboard', '-t', target, '-i',
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-            env=_x_env(display),
-            start_new_session=True,
-        )
-        proc.stdin.write(data)
-        await proc.stdin.drain()
-        proc.stdin.close()
-
-        # xclip форкается. Если он вышел сам — хорошо,
-        # если продолжает висеть — это ожидаемо, не убиваем.
-        try:
-            await asyncio.wait_for(proc.wait(), timeout=1.0)
-        except asyncio.TimeoutError:
-            pass
-        return True
-    except Exception as e:
-        logger.error('x11 [{}]: write failed: [{}]', display, e)
-        return False
 
 
 async def _x11_has_content(display: str, content: ClipboardContent) -> bool:
@@ -398,7 +326,7 @@ async def _x11_pick_target(display: str) -> tuple[str, str] | None:
     return None
 
 
-async def _listen_one_x11(
+async def listen_clipboard_x11(
     display: str,
     size_limit: int,
 ) -> AsyncGenerator[ClipboardContent, None]:
@@ -409,7 +337,6 @@ async def _listen_one_x11(
                 'clipnotify',
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
-                env=_x_env(display),
             )
 
             await notify.wait()
@@ -442,147 +369,36 @@ async def _listen_one_x11(
         )
 
 
-async def _pump(gen, queue: asyncio.Queue):
-    try:
-        async for item in gen:
-            await queue.put(item)
-    except asyncio.CancelledError:
-        raise
-    except Exception as e:
-        logger.error('x11: pump failed: [{}]', e)
-
-
-async def _listen_clipboard_x11(
-    size_limit: int,
-) -> AsyncGenerator[ClipboardContent, None]:
-    """Слушает все живые X-серверы. Мёртвые молча пропускает."""
-    if shutil.which('xclip') is None or shutil.which('clipnotify') is None:
-        logger.info('x11: xclip/clipnotify not found, backend disabled')
-        return
-
-    displays = _find_x_displays()
-    if not displays:
-        logger.info('x11: no X sockets found, backend disabled')
-        return
-
-    alive: list[str] = []
-    for display in displays:
-        if await _x11_alive(display):
-            alive.append(display)
-            logger.info('x11: display [{}] alive', display)
-        else:
-            logger.debug('x11: display [{}] skipped', display)
-
-    if not alive:
-        logger.info('x11: no live X servers, backend disabled')
-        return
-
-    queue: asyncio.Queue = asyncio.Queue()
-    pumps: list[asyncio.Task] = [
-        asyncio.create_task(_pump(_listen_one_x11(d, size_limit), queue))
-        for d in alive
-    ]
-
-    try:
-        while True:
-            content = await queue.get()
-            yield content
-    finally:
-        for task in pumps:
-            task.cancel()
-        await asyncio.gather(*pumps, return_exceptions=True)
-
-
-async def _is_duplicate_clipboard_x11(content: ClipboardContent) -> bool:
-    """True если контент лежит хотя бы на одном живом X-сервере."""
+async def set_clipboard_x11(content: ClipboardContent) -> bool:
+    """Пишет контент во все живые X-серверы, где его ещё нет."""
     if not content.data:
         return False
 
-    displays = _find_x_displays()
-    for display in displays:
-        if not await _x11_alive(display):
-            continue
-        if await _x11_has_content(display, content):
-            return True
-
-    return False
-
-
-async def _set_clipboard_x11(content: ClipboardContent):
-    """Пишет контент во все живые X-серверы, где его ещё нет."""
-    if not content.data:
-        return
-
-    if await _is_duplicate_clipboard_x11(content):
-        logger.debug('x11: content already present on some display, checking per-display')
-    else:
-        logger.debug('x11: content not present anywhere')
-
-    displays = _find_x_displays()
-    if not displays:
-        return
-
     raw = content.data
 
-    # отбираем только живые, и только те, где ещё нет этого контента
-    need_write: list[str] = []
-    for display in displays:
-        if not await _x11_alive(display):
-            continue
-        if await _x11_has_content(display, content):
-            logger.debug('x11 [{}]: already has content, skip', display)
-            continue
-        need_write.append(display)
-
-    if not need_write:
-        logger.debug('x11: all live displays already have this content')
-        return
-
-    target = _x11_target_for_mime(content.mime)
-
-    results = await asyncio.gather(
-        *[_x11_write(d, target, raw) for d in need_write],
-        return_exceptions=True,
-    )
-
-    for display, result in zip(need_write, results):
-        if isinstance(result, Exception):
-            logger.error('x11 [{}]: write exception: [{}]', display, result)
-        elif not result:
-            logger.warning('x11 [{}]: write failed', display)
-        else:
-            logger.info(
-                'x11 [{}]: wrote [{}] bytes as [{}]',
-                display, len(raw), target,
-            )
-
-
-async def listen_clipboard(size_limit: int) -> AsyncGenerator[ClipboardContent, None]:
-    queue: asyncio.Queue = asyncio.Queue()
-    tasks: set[asyncio.Task] = set()
-
-    if _HAS_WAYLAND:
-        tasks.add(asyncio.create_task(_pump(_listen_clipboard_wayland(size_limit), queue)))
-
-    tasks.add(asyncio.create_task(_pump(_listen_clipboard_x11(size_limit), queue)))
-
     try:
-        while True:
-            yield await queue.get()
-    finally:
-        for task in tasks:
-            task.cancel()
+        target = _x11_target_for_mime(content.mime)
 
-        await asyncio.gather(*tasks, return_exceptions=True)
+        proc = await asyncio.create_subprocess_exec(
+            'xclip', '-selection', 'clipboard', '-t', target, '-i',
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
 
+        proc.stdin.write(content.data)
+        await proc.stdin.drain()
+        proc.stdin.close()
 
-async def set_clipboard(content: ClipboardContent):
-    coros = []
+        # xclip форкается. Если он вышел сам — хорошо,
+        # если продолжает висеть — это ожидаемо, не убиваем.
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=10.0)
+            logger.info('x11: wrote [{}] bytes as [{}]', len(raw), target)
+        except asyncio.TimeoutError:
+            pass
 
-    coros.append(_set_clipboard_x11(content))
-
-    if _HAS_WAYLAND:
-        coros.append(_set_clipboard_wayland(content))
-
-
-    await asyncio.gather(*coros)
+        return True
+    except Exception as e:
+        logger.error('x11 [{}]: write failed: [{}]', display, e)
+        return False

@@ -1,18 +1,28 @@
 import os
+import sys
 import shutil
 import socket
+import getpass
+import sqlite3
 from importlib.metadata import version, PackageNotFoundError
 from pathlib import Path
 import tomllib
 from typing import TYPE_CHECKING
 from websockets import ServerConnection
-from clipik.types import SetClipboardFn, ListenClipboardFn
-from clipik.exception import InitializationError
+from .types import (
+    DiscoverServicesFn,
+    SetClipboardFn,
+    ListenClipboardFn,
+    RegisterServiceFn,
+    UnregisterServiceFn,
+)
+from .exception import InitializationError
+from .functions import get_ips_by_interface, get_default_ip
 
 
 if TYPE_CHECKING:
     from zeroconf import Zeroconf
-    from clipik.model import Config
+    from .model import Config
 
 
 def _resolve_version() -> str:
@@ -36,29 +46,78 @@ class Container:
     protocol: str = 'CLIPIK'
     version: str = _resolve_version()
 
+    command: str
+    session: str | None = None
+    hostname: str
     service_name: str
     service_type: str = '_clipik._tcp.local.'
-    zeroconf: "Zeroconf"
+    zeroconf: "Zeroconf" | None
 
     config: "Config"
-    set_clipboard: SetClipboardFn
-    listen_clipboard: ListenClipboardFn
+    db_connection: sqlite3.Connection
+    fresh_config: bool
+    fresh_config_path: Path
+    config_path: Path
+    set_clipboard: SetClipboardFn | None = None
+    listen_clipboard: ListenClipboardFn | None = None
+    discover_services: DiscoverServicesFn | None = None
+    register_service: RegisterServiceFn | None = None
+    unregister_service: UnregisterServiceFn | None = None
     required_utils: list[str] = []
-    clients: set[ServerConnection] = set()
+    servers: set[ServerConnection] = set()
+    interface_ips: list[str] = []
 
     def __init__(
         self,
+        command: str,
         config: "Config",
-        zeroconf: "Zeroconf",
-        set_clipboard: SetClipboardFn,
-        listen_clipboard: ListenClipboardFn,
+        db_connection: sqlite3.Connection,
+        fresh_config: bool,
+        fresh_config_path: Path,
+        config_path: Path,
+        set_clipboard: SetClipboardFn | None = None,
+        listen_clipboard: ListenClipboardFn | None = None,
+        discover_services: DiscoverServicesFn | None = None,
+        register_service: RegisterServiceFn | None = None,
+        unregister_service: UnregisterServiceFn | None = None,
+        zeroconf: "Zeroconf" | None = None,
     ):
-        self.service_name = f"clipik-{socket.gethostname()}"
+        self.command = command
+
+        if command == 'client':
+            self.session = getpass.getuser()
+
+            if os.name == 'nt' or sys.platform == 'darwin': # Windows / MacOS
+                pass
+            else: # Linux / Unix
+                if sid := os.getenv('XDG_SESSION_ID'):
+                    self.session = f"{self.session} - logind-{sid}"
+                elif wd := os.getenv('WAYLAND_DISPLAY'):
+                    self.session = f"{self.session} - {wd}"
+                elif d := os.getenv('DISPLAY'):
+                    self.session = f"{self.session} - x11-{d}"
+                else:
+                    self.session = f"{self.session} - Unknown"
+
+        self.hostname = socket.gethostname()
+        self.service_name = f"clipik-{self.hostname}"
 
         self.config = config
+        self.db_connection = db_connection
+        self.fresh_config = fresh_config
+        self.fresh_config_path = fresh_config_path
+        self.config_path = config_path
         self.zeroconf = zeroconf
         self.set_clipboard = set_clipboard
         self.listen_clipboard = listen_clipboard
+        self.discover_services = discover_services
+        self.register_service = register_service
+        self.unregister_service = unregister_service
+
+        if self.config.interfaces:
+            self.interface_ips = get_ips_by_interface(self.config.interfaces)
+        else:
+            self.interface_ips = [get_default_ip()]
 
         required_utils: list[str] = []
 

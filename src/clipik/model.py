@@ -1,8 +1,20 @@
+import os
+import sys
 import msgpack
 import ipaddress
-import os
+from datetime import datetime
+from pathlib import Path
 from typing import Literal
 from pydantic import BaseModel, field_validator
+
+
+class Clipboard(BaseModel):
+    id: int | None = None
+    mime: str
+    data: bytes
+    hostname: str
+    ip: str
+    created_at: datetime | None = None
 
 
 class ClipboardContent(BaseModel):
@@ -26,6 +38,8 @@ class ClipboardEvent(BaseModel):
     event: Literal['clipboard'] = 'clipboard'
     mime: str
     data: bytes
+    session: str
+    hostname: str
 
 
 class NewServiceEvent(BaseModel):
@@ -44,12 +58,9 @@ class LoseServiceEvent(BaseModel):
     port: int
 
 
-class Config(BaseModel):
-    port: int | None = None
-    size_limit: int | None = None
-    log_level: str | None = None
-    handshake_timeout: int | None = None
-    allowed_ips: list[str] | None = None
+class BaseConfig(BaseModel):
+    allowed_ips: list[str] = []
+    interfaces: list[str] = []
 
     @field_validator('allowed_ips')
     @classmethod
@@ -68,36 +79,25 @@ class Config(BaseModel):
 
         return value
 
-    def resolve_properties(self) -> None:
-        if not self.log_level:
-            self.log_level = os.getenv('CLIPIK_LOG_LEVEL', default='INFO')
 
-        if not self.port:
-            self.port = int(os.getenv('CLIPIK_PORT', default=8765))
-
-        if not self.size_limit:
-            self.size_limit = int(os.getenv('CLIPIK_SIZE_LIMIT', default=64 * 1024 * 1024))
-
-        if not self.handshake_timeout:
-            self.handshake_timeout = int(os.getenv('CLIPIK_HANDSHAKE_TIMEOUT', default=7))
-
-    def is_ip_allowed(self, ip: str) -> bool:
-        if not self.allowed_ips:
-            return True
-
-        addr = ipaddress.ip_address(ip)
-
-        for entry in self.allowed_ips:
-            if '/' in entry:
-                if addr in ipaddress.ip_network(entry, strict=False):
-                    return True
-            else:
-                if addr == ipaddress.ip_address(entry):
-                    return True
-
-        return False
+class ServerConfig(BaseConfig):
+    port: int
+    log_dir: Path
+    log_level: str
+    size_limit: int
+    handshake_timeout: int
+    database: Path
 
 
+class ClientConfig(BaseConfig):
+    log_dir: Path
+    log_level: str
+    size_limit: int
+    handshake_timeout: int
+    database: Path
+
+
+Config = ServerConfig | ClientConfig
 AnyEvent = HandshakeEvent | HandshakeAckEvent | ClipboardEvent
 
 

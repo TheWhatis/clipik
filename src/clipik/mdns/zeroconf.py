@@ -1,15 +1,17 @@
+import psutil
 import socket
 import ipaddress
 import asyncio
 from typing import TYPE_CHECKING
 from loguru import logger
 from collections.abc import AsyncGenerator
-from clipik.model import LoseServiceEvent, NewServiceEvent
 from zeroconf import IPVersion, InterfaceChoice, ServiceInfo, Zeroconf, ServiceListener
+from ..model import LoseServiceEvent, NewServiceEvent
+from ..functions import get_default_ip
 
 
 if TYPE_CHECKING:
-    from clipik.container import Container
+    from ..container import Container
 
 
 def _addr_to_str(packed: bytes) -> str:
@@ -33,15 +35,15 @@ class _ServiceListener(ServiceListener):
         self.own_name = f"{container.service_name}.{container.service_type}"
 
     def add_service(self, zc: Zeroconf, type_, name):
-        if name == self.own_name:
-            logger.info('Service name is [{}], skip', name)
-            return
-
         info = zc.get_service_info(type_, name)
 
         if info and info.addresses:
             for packed in info.addresses:
                 ip = _addr_to_str(packed)
+
+                if name == self.own_name and ip not in self.container.interface_ips:
+                    logger.warning('Local connection to server is not in interfaces')
+                    continue
 
                 asyncio.run_coroutine_threadsafe(
                     self.queue.put(NewServiceEvent(
@@ -56,15 +58,15 @@ class _ServiceListener(ServiceListener):
                 logger.debug('New service [{}] at [{}:{}]', name, ip, info.port)
 
     def remove_service(self, zc: Zeroconf, type_, name):
-        if name == self.own_name:
-            logger.info('Service name is [{}], skip', name)
-            return
-
         info = zc.get_service_info(type_, name)
 
         if info and info.addresses:
             for packed in info.addresses:
                 ip = _addr_to_str(info.addresses[0])
+
+                if name == self.own_name and ip not in self.container.interface_ips:
+                    logger.warning('Local connection to server is not in interfaces')
+                    continue
 
                 asyncio.run_coroutine_threadsafe(
                     self.queue.put(LoseServiceEvent(
@@ -82,10 +84,23 @@ class _ServiceListener(ServiceListener):
         pass
 
 
-def get_zeroconf() -> Zeroconf:
+def get_zeroconf(interfaces: list[str]) -> Zeroconf:
+    interfaces_inp = InterfaceChoice.Default
+
+    if interfaces:
+        interfaces_inp = []
+        for interface in interfaces:
+            addrs = psutil.net_if_addrs(interface, [])
+
+            for addr in addrs:
+                if addr.family != socket.AF_INET:
+                    continue
+
+                interfaces_inp.append(addr.address)
+
     return Zeroconf(
-        interfaces=InterfaceChoice.All,
-        ip_version=IPVersion.All,
+        interfaces=interfaces_inp,
+        ip_version=IPVersion.V4Only,
     )
 
 
