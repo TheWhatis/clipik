@@ -16,7 +16,7 @@ CLIPIK - сервис для реализации общего буфера об
 
   #+begin_src bash
     uv tool install clipik
-    clipik
+    clipik server & clipik client
   #+end_src
 
   или
@@ -24,7 +24,7 @@ CLIPIK - сервис для реализации общего буфера об
     git clone https://gitflic.ru/project/kurilka/clipik
     cd clipik
     uv pip install -e .
-    clipik
+    clipik server & clipik client
   #+end_src
 
 * Использование

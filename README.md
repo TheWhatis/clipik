@@ -14,7 +14,7 @@ CLIPIK - сервис для реализации общего буфера об
 
 ``` bash
 uv tool install clipik
-clipik
+clipik server & clipik client
 ```
 
 или
@@ -23,7 +23,7 @@ clipik
 git clone https://gitflic.ru/project/kurilka/clipik
 cd clipik
 uv pip install -e .
-clipik
+clipik server & clipik client
 ```
 
 # Использование
