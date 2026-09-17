@@ -31,10 +31,18 @@ clipik
 При передаче опций, они перезаписывают данные с конфига и переменных
 окружения.
 
+- `server` - Запускает сервер с websocket-м на указанном порту (8765) и
+  регестрирует сервис в mdns
+- `client` - Должен запускаться после иницилизации граф. оболочки,
+  мониторит буфер обмена и отправляет его на `server`
+- `list`, `first`, `last`, `paste` - Читают бд и записывают данные в
+  буфер обмена (по запросу `paste`)
+
 ```
 $ clipik -h
-usage: clipik [-h] [--version] [--config PATH] [--port PORT] [--size-limit BYTES]
-              [--handshake-timeout SECONDS] [--log-level LEVEL]
+usage: clipik [-h] [--version] [--config PATH] [--log-level LEVEL] [--log-dir PATH]
+              [--size-limit BYTES] [--handshake-timeout SECONDS] [--database PATH]
+              COMMAND ...
 
 Synchronize clipboard by network
 
@@ -42,17 +50,29 @@ options:
   -h, --help            show this help message and exit
   --version             show program's version number and exit
   --config PATH         Force choice config file
-  --port PORT           WebSocket TCP-port
+  --log-level LEVEL     Logging level, default [INFO]
+  --log-dir PATH        Force choice log directory
   --size-limit BYTES    Max size WS-messages and stdout from wayland/x11 clipboard
   --handshake-timeout SECONDS
                         Timeout for wait to websocket handshake
-  --log-level LEVEL     Logging level, default [INFO]
+  --database PATH       Force choice database file
+
+command:
+  COMMAND
+    server              Run synchronization server
+    client              Run synchronization client
+    list                Get list clipboard history
+    first               Get first clipboard element
+    last                Get last clipboard element
+    paste               Paste record in clipboard
 ```
 
 # Конфигурация
 
+## Сервер
+
 По-умолчанию конфигурация находиться по пути
-`~/.config/clipik/config.json`, если его не существует, при запуске
+`~/.config/clipik/server.json`, если его не существует, при запуске
 **clipik** он создается автоматически, но не все параметры там будут
 прописаны.
 
@@ -60,10 +80,12 @@ options:
 
 ``` json
 {
-  "port": 8765,
-  "size_limit": 67108864,
-  "log_level": "INFO",
-  "handshake_timeout": 7
+    "interfaces": [],
+    "port": 8765,
+    "size_limit": 67108864,
+    "log_dir": "~/.local/clipik",
+    "log_level": "INFO",
+    "handshake_timeout": 7
 }
 ```
 
@@ -71,15 +93,53 @@ options:
 
 ``` json
 {
-  "port": 8765,
-  "size_limit": 67108864,
-  "log_level": "INFO",
-  "handshake_timeout": 7,
-  "allowed_ips": [
-      "192.164.0.1/24",
-      "100.0.0.1",
-      "100.0.0.2"
-  ]
+    "interfaces": [],
+    "port": 8765,
+    "size_limit": 67108864,
+    "log_dir": "~/.local/clipik",
+    "log_level": "INFO",
+    "handshake_timeout": 7,
+    "database": "~/.local/clipik/clipik.db",
+    "allowed_ips": [
+        "192.164.0.1/24",
+        "100.0.0.1",
+        "100.0.0.2"
+    ]
+}
+```
+
+## Клиент
+
+По тому-же пути, только `client.json` - `~/.config/clipik/client.json`,
+создается сам если не существует.
+
+Имеет вид:
+
+``` json
+{
+    "interfaces": [],
+    "size_limit": 67108864,
+    "log_dir": "~/.local/clipik",
+    "log_level": "INFO",
+    "handshake_timeout": 7,
+}
+```
+
+Со всеми параметрами такой;
+
+``` json
+{
+    "interfaces": [],
+    "size_limit": 67108864,
+    "log_dir": "~/.local/clipik",
+    "log_level": "INFO",
+    "handshake_timeout": 7,
+    "database": "~/.local/clipik/clipik.db",
+    "allowed_ips": [
+        "192.164.0.1/24",
+        "100.0.0.1",
+        "100.0.0.2"
+    ]
 }
 ```
 
@@ -96,6 +156,14 @@ options:
   буфера)
 - `CLIPIK_HANDSHAKE_TIMEOUT=7` - Сколько ждать HANDSHAKE при подключении
 - `CLIPIK_SIZE_LIMIT=67108864` - Макс. размер передаваемых данных
+- `CLIPIK_DATABASE=~/.local/clipik/clipik.db` - Путь до sqlite3 файла c
+  БД
+
+# База данных
+
+Сервер работает с sqlite3 БД, вся история буфера по сети именно там, с
+помощью `clipik list` можно посмотреть записанную историю, а
+`clipik paste <id>` позволяет её вставить в буфер обмена.
 
 # Обязательные утилиты (зависимости)
 
@@ -115,7 +183,9 @@ options:
 
 ## Windows (пока не поддерживается)
 
-# <span class="todo TODO">TODO</span> \[3/9\]
+## Android (пока не поддерживается)
+
+# <span class="todo TODO">TODO</span> \[3/10\]
 
 - [ ] Возможность регистрировать сервисы для подключения к удаленным
   сетями
@@ -125,6 +195,7 @@ options:
   файловых менеджеров
 - [ ] Поддержка MacOS
 - [ ] Поддержка Windows
+- [ ] Поддержка Android
 - [ ] Фоновая загрузка больших файлов с ожиданием вставки (до конца
   загрузки)
 - [x] Поддержка передачи данных не только через переменные окружения, но

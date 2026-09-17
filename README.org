@@ -30,10 +30,15 @@ CLIPIK - сервис для реализации общего буфера об
 * Использование
   При передаче опций, они перезаписывают данные с конфига и переменных окружения.
 
+  - =server= - Запускает сервер с websocket-м на указанном порту (8765) и регестрирует сервис в mdns
+  - =client= - Должен запускаться после иницилизации граф. оболочки, мониторит буфер обмена и отправляет его на =server=
+  - =list=, =first=, =last=, =paste= - Читают бд и записывают данные в буфер обмена (по запросу =paste=)
+
   #+begin_src text
     $ clipik -h
-    usage: clipik [-h] [--version] [--config PATH] [--port PORT] [--size-limit BYTES]
-                  [--handshake-timeout SECONDS] [--log-level LEVEL]
+    usage: clipik [-h] [--version] [--config PATH] [--log-level LEVEL] [--log-dir PATH]
+                  [--size-limit BYTES] [--handshake-timeout SECONDS] [--database PATH]
+                  COMMAND ...
 
     Synchronize clipboard by network
 
@@ -41,42 +46,89 @@ CLIPIK - сервис для реализации общего буфера об
       -h, --help            show this help message and exit
       --version             show program's version number and exit
       --config PATH         Force choice config file
-      --port PORT           WebSocket TCP-port
+      --log-level LEVEL     Logging level, default [INFO]
+      --log-dir PATH        Force choice log directory
       --size-limit BYTES    Max size WS-messages and stdout from wayland/x11 clipboard
       --handshake-timeout SECONDS
                             Timeout for wait to websocket handshake
-      --log-level LEVEL     Logging level, default [INFO]
+      --database PATH       Force choice database file
+
+    command:
+      COMMAND
+        server              Run synchronization server
+        client              Run synchronization client
+        list                Get list clipboard history
+        first               Get first clipboard element
+        last                Get last clipboard element
+        paste               Paste record in clipboard
   #+end_src
 
 * Конфигурация
-  По-умолчанию конфигурация находиться по пути =~/.config/clipik/config.json=,
-  если его не существует, при запуске *clipik* он создается автоматически,
-  но не все параметры там будут прописаны.
+** Сервер
+   По-умолчанию конфигурация находиться по пути =~/.config/clipik/server.json=,
+   если его не существует, при запуске *clipik* он создается автоматически,
+   но не все параметры там будут прописаны.
 
-  Конфиг будет иметь вид:
-  #+begin_src json
-    {
-      "port": 8765,
-      "size_limit": 67108864,
-      "log_level": "INFO",
-      "handshake_timeout": 7
-    }
-  #+end_src
+   Конфиг будет иметь вид:
+   #+begin_src json
+     {
+         "interfaces": [],
+         "port": 8765,
+         "size_limit": 67108864,
+         "log_dir": "~/.local/clipik",
+         "log_level": "INFO",
+         "handshake_timeout": 7
+     }
+   #+end_src
 
-  Со всеми параметрами такой:
-  #+begin_src json
-    {
-      "port": 8765,
-      "size_limit": 67108864,
-      "log_level": "INFO",
-      "handshake_timeout": 7,
-      "allowed_ips": [
-          "192.164.0.1/24",
-          "100.0.0.1",
-          "100.0.0.2"
-      ]
-    }
-  #+end_src
+   Со всеми параметрами такой:
+   #+begin_src json
+     {
+         "interfaces": [],
+         "port": 8765,
+         "size_limit": 67108864,
+         "log_dir": "~/.local/clipik",
+         "log_level": "INFO",
+         "handshake_timeout": 7,
+         "database": "~/.local/clipik/clipik.db",
+         "allowed_ips": [
+             "192.164.0.1/24",
+             "100.0.0.1",
+             "100.0.0.2"
+         ]
+     }
+   #+end_src
+** Клиент
+   По тому-же пути, только =client.json= - =~/.config/clipik/client.json=,
+   создается сам если не существует.
+
+   Имеет вид:
+   #+begin_src json
+     {
+         "interfaces": [],
+         "size_limit": 67108864,
+         "log_dir": "~/.local/clipik",
+         "log_level": "INFO",
+         "handshake_timeout": 7,
+     }
+   #+end_src
+
+   Со всеми параметрами такой;
+   #+begin_src json
+     {
+         "interfaces": [],
+         "size_limit": 67108864,
+         "log_dir": "~/.local/clipik",
+         "log_level": "INFO",
+         "handshake_timeout": 7,
+         "database": "~/.local/clipik/clipik.db",
+         "allowed_ips": [
+             "192.164.0.1/24",
+             "100.0.0.1",
+             "100.0.0.2"
+         ]
+     }
+   #+end_src
 
 * Переменные окружения
   Имеются только переменные окружения, за счет которых можно менять свойства:
@@ -86,6 +138,12 @@ CLIPIK - сервис для реализации общего буфера об
   - ~CLIPIK_PORT=8765~ - На каком порту поднять websocket (передача буфера)
   - ~CLIPIK_HANDSHAKE_TIMEOUT=7~ - Сколько ждать HANDSHAKE при подключении
   - ~CLIPIK_SIZE_LIMIT=67108864~ - Макс. размер передаваемых данных
+  - ~CLIPIK_DATABASE=~/.local/clipik/clipik.db~ - Путь до sqlite3 файла c БД
+
+* База данных
+  Сервер работает с sqlite3 БД, вся история буфера по сети именно там,
+  с помощью =clipik list= можно посмотреть записанную историю, а
+  =clipik paste <id>= позволяет её вставить в буфер обмена.
 
 * Обязательные утилиты (зависимости)
 ** Linux
@@ -97,13 +155,15 @@ CLIPIK - сервис для реализации общего буфера об
     - =wl-copy=
 ** MacOs (пока не поддерживается)
 ** Windows (пока не поддерживается)
+** Android (пока не поддерживается)
 
-* TODO [3/9]
+* TODO [3/10]
   - [ ] Возможность регистрировать сервисы для подключения к удаленным сетями
   - [X] Регистрацию при подключении (ввод pin-кода/разрешенные хосты в конфиге)
   - [ ] Поддержка всех типов данных, в том числе при копировании из файловых менеджеров
   - [ ] Поддержка MacOS
   - [ ] Поддержка Windows
+  - [ ] Поддержка Android
   - [ ] Фоновая загрузка больших файлов с ожиданием вставки (до конца загрузки)
   - [X] Поддержка передачи данных не только через переменные окружения, но и через опции и конфиги
   - [X] Одновременная работа на wayland и x11 без переключения
