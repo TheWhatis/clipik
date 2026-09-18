@@ -13,7 +13,7 @@ CLIPIK - сервис для реализации общего буфера об
 Тут должен быть установлен `PATH=${HOME}/.local/bin:${PATH}`
 
 ``` bash
-uv tool install clipik
+uv tool install 'clipik[linux]'
 clipik server & clipik client
 ```
 
@@ -22,7 +22,7 @@ clipik server & clipik client
 ``` bash
 git clone https://gitflic.ru/project/kurilka/clipik
 cd clipik
-uv pip install -e .
+uv pip install -e '.[linux]'
 clipik server & clipik client
 ```
 
