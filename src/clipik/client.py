@@ -3,6 +3,7 @@ from loguru import logger
 from .websocket import connect_to_server, disconnect_from_server
 from .container import Container
 from .functions import is_ip_allowed
+from .model import ClipboardEvent, event_to_bytes
 
 
 async def _discover(container: Container):
@@ -33,9 +34,51 @@ async def _discover(container: Container):
         await asyncio.gather(*tasks)
 
 
+async def _listen_clipboard_and_broadcasting(container: Container):
+    tasks: list[asyncio.Task] = []
+
+    try:
+        async for content in container.listen_clipboard(container.config.size_limit):
+            if not content.data:
+                continue
+
+            event = ClipboardEvent(
+                mime=content.mime,
+                data=content.data,
+                hostname=container.hostname,
+                session=container.session,
+            )
+
+            payload = event_to_bytes(event)
+
+            try:
+                if container.servers:
+                    logger.debug('Broadcasting to [{}] servers', len(container.servers))
+
+                    for server in container.servers:
+                        tasks.append(asyncio.create_task(server.send(payload)))
+            except Exception as e:
+                logger.error(
+                    'Error [{}] broadcasting to [{}] servers, mime [{}]',
+                    e,
+                    len(container.servers),
+                    content.mime
+                )
+    finally:
+        for task in tasks:
+            task.cancel()
+
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+
 async def start(container: Container):
     try:
         logger.info('Version [{}]', container.version)
-        await _discover(container)
+
+        await asyncio.gather(
+            _discover(container),
+            _listen_clipboard_and_broadcasting(container),
+        )
     except Exception as e:
         logger.critical('Error setting up and deploy client: [{}]', e)

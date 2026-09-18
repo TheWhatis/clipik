@@ -147,43 +147,6 @@ async def start_websocket_server(container: Container, ready: asyncio.Event | No
         await asyncio.Future()
 
 
-async def _broadcast_local(container: Container):
-    tasks: list[asyncio.Task] = []
-
-    try:
-        async for content in container.listen_clipboard(container.config.size_limit):
-            if not content.data:
-                continue
-
-            event = ClipboardEvent(
-                mime=content.mime,
-                data=content.data,
-                hostname=container.hostname,
-                session=container.session,
-            )
-
-            payload = event_to_bytes(event)
-
-            try:
-                if container.servers:
-                    logger.debug('Broadcasting to [{}] servers', len(container.servers))
-
-                    for server in container.servers:
-                        tasks.append(asyncio.create_task(server.send(payload)))
-            except Exception as e:
-                logger.error(
-                    'Error [{}] broadcasting to [{}] servers, mime [{}]',
-                    e,
-                    len(container.servers),
-                    content.mime
-                )
-    finally:
-        for task in tasks:
-            task.cancel()
-
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-
 async def _listen_server_messages(ws: ServerConnection):
     ip = ws.remote_address[0]
 
@@ -249,12 +212,7 @@ async def connect_to_server(
                     return
 
                 logger.info('Connected to server [{}]', url)
-
-                await asyncio.gather(
-                    _listen_server_messages(server),
-                    _broadcast_local(container),
-                    return_exceptions=True,
-                )
+                await _listen_server_messages(server)
             finally:
                 container.servers.remove(server)
     except Exception as e:
