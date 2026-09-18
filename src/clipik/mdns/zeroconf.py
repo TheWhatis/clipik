@@ -41,9 +41,9 @@ class _ServiceListener(ServiceListener):
             for packed in info.addresses:
                 ip = _addr_to_str(packed)
 
-                if name == self.own_name and ip not in self.container.interface_ips:
-                    logger.warning('Local connection to server is not in interfaces')
-                    continue
+                # if name == self.own_name and ip not in self.container.interface_ips:
+                #     logger.warning('Local connection to server is not in interfaces')
+                #     continue
 
                 asyncio.run_coroutine_threadsafe(
                     self.queue.put(NewServiceEvent(
@@ -64,9 +64,9 @@ class _ServiceListener(ServiceListener):
             for packed in info.addresses:
                 ip = _addr_to_str(info.addresses[0])
 
-                if name == self.own_name and ip not in self.container.interface_ips:
-                    logger.warning('Local connection to server is not in interfaces')
-                    continue
+                # if name == self.own_name and ip not in self.container.interface_ips:
+                #     logger.warning('Local connection to server is not in interfaces')
+                #     continue
 
                 asyncio.run_coroutine_threadsafe(
                     self.queue.put(LoseServiceEvent(
