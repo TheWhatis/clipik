@@ -60,6 +60,7 @@ def add_to_history(connection: sqlite3.Connection, content: Clipboard) -> int:
         return cursor.lastrowid
     except Exception as e:
         logger.error('Error while add to history: [{}]', e)
+        raise e
 
 
 def get_from_history(connection: sqlite3.Connection, id: int) -> Clipboard | None:
