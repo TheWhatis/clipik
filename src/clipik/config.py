@@ -85,6 +85,9 @@ def read_config_file(
     config: type[Config],
     overrides: dict[str, object] = {},
 ) -> Config:
+    if not path.exists():
+        write_fresh_config(path, config)
+
     raw = path.read_text(encoding='utf-8')
 
     def_config = _build_def_config(config)
