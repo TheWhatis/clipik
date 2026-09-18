@@ -51,7 +51,7 @@ class Container:
     hostname: str
     service_name: str
     service_type: str = '_clipik._tcp.local.'
-    zeroconf: "Zeroconf" | None
+    zeroconf: "Zeroconf | None"
 
     config: "Config"
     db_connection: sqlite3.Connection
@@ -80,7 +80,7 @@ class Container:
         discover_services: DiscoverServicesFn | None = None,
         register_service: RegisterServiceFn | None = None,
         unregister_service: UnregisterServiceFn | None = None,
-        zeroconf: "Zeroconf" | None = None,
+        zeroconf: "Zeroconf | None" = None,
     ):
         self.command = command
 
