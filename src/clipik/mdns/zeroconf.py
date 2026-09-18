@@ -33,55 +33,40 @@ class _ServiceListener(ServiceListener):
         self.loop = loop
         self.container = container
         self.own_name = f"{container.service_name}.{container.service_type}"
+        self._cache: dict[str, ServiceInfo] = {}
 
-    def add_service(self, zc: Zeroconf, type_, name):
+    def _emit(self, event_cls, name: str, info: ServiceInfo):
+        for packed in info.addresses:
+            ip = _addr_to_str(packed)
+            asyncio.run_coroutine_threadsafe(
+                self.queue.put(event_cls(
+                    name=name,
+                    ip=ip,
+                    host=ip,
+                    port=info.port,
+                )),
+                self.loop,
+            )
+
+    def add_service(self, zc: Zeroconf, type_: str, name: str):
         info = zc.get_service_info(type_, name)
+        if not info:
+            logger.warning('add_service: info is None for [{}]', name)
+            return
+        self._cache[name] = info
+        self._emit(NewServiceEvent, name, info)
+        logger.debug('New service [{}]', name)
 
-        if info and info.addresses:
-            for packed in info.addresses:
-                ip = _addr_to_str(packed)
+    def remove_service(self, zc: Zeroconf, type_: str, name: str):
+        info = self._cache.pop(name, None)
+        if info is None:
+            logger.debug('remove_service: no cached info for [{}]', name)
+            return
+        self._emit(LoseServiceEvent, name, info)
+        logger.debug('Lose service [{}]', name)
 
-                # if name == self.own_name and ip not in self.container.interface_ips:
-                #     logger.warning('Local connection to server is not in interfaces')
-                #     continue
-
-                asyncio.run_coroutine_threadsafe(
-                    self.queue.put(NewServiceEvent(
-                        name=name,
-                        ip=ip,
-                        host=ip,
-                        port=info.port,
-                    )),
-                    self.loop,
-                )
-
-                logger.debug('New service [{}] at [{}:{}]', name, ip, info.port)
-
-    def remove_service(self, zc: Zeroconf, type_, name):
-        info = zc.get_service_info(type_, name)
-
-        if info and info.addresses:
-            for packed in info.addresses:
-                ip = _addr_to_str(info.addresses[0])
-
-                # if name == self.own_name and ip not in self.container.interface_ips:
-                #     logger.warning('Local connection to server is not in interfaces')
-                #     continue
-
-                asyncio.run_coroutine_threadsafe(
-                    self.queue.put(LoseServiceEvent(
-                        name=name,
-                        ip=ip,
-                        host=ip,
-                        port=info.port,
-                    )),
-                    self.loop
-                )
-
-                logger.debug('Lose service [{}]', name)
-
-    def update_service(self, zc: Zeroconf, type_, name):
-        pass
+    def update_service(self, zc: Zeroconf, type_: str, name: str):
+        logger.debug('Update service [{}]', name)
 
 
 def get_zeroconf(interfaces: list[str]) -> Zeroconf:
