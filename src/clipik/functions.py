@@ -1,5 +1,6 @@
 import json
 import socket
+from typing import TYPE_CHECKING
 import psutil
 import asyncio
 import argparse
@@ -8,6 +9,9 @@ from loguru import logger
 from packaging.version import Version
 from .model import Config, Clipboard, ClipboardContent
 from .database import get_history, get_from_history
+
+if TYPE_CHECKING:
+    from .container import Contaier
 
 
 def is_ip_allowed(config: Config, ip: str) -> bool:
@@ -54,7 +58,7 @@ def _raw_content(content: Clipboard):
     print(f"[{content.id}] {content.hostname} {content.data[:99]} ({len(content.data)} bytes)")
 
 
-def list_contents(container: Container, args: argparse.Namespace):
+def list_contents(container: "Container", args: argparse.Namespace):
     history = get_history(container.db_connection, limit=args.limit)
 
     if args.format == 'json':
@@ -69,7 +73,7 @@ def list_contents(container: Container, args: argparse.Namespace):
         _raw_content(content)
 
 
-def first_contents(container: Container, args: argparse.Namespace):
+def first_contents(container: "Container", args: argparse.Namespace):
     history = get_history(container.db_connection, limit=1, created_at_sort='DESC')
 
     if len(history) == 0:
@@ -83,7 +87,7 @@ def first_contents(container: Container, args: argparse.Namespace):
     _raw_content(history[0])
 
 
-def last_contents(container: Container, args: argparse.Namespace):
+def last_contents(container: "Container", args: argparse.Namespace):
     history = get_history(container.db_connection, limit=1, created_at_sort='ASC')
 
     if len(history) == 0:
@@ -97,7 +101,7 @@ def last_contents(container: Container, args: argparse.Namespace):
     _raw_content(history[0])
 
 
-async def paste_clipboard(container: Container, args: argparse.Namespace):
+async def paste_clipboard(container: "Container", args: argparse.Namespace):
     clipboard = await asyncio.to_thread(
         get_from_history,
         container.db_connection,
