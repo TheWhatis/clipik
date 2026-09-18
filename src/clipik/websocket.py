@@ -15,16 +15,12 @@ from .database import add_to_history
 from .functions import is_ip_allowed, supports_versions
 
 
-async def _add_to_history(connection, clipboard):
-    i = 0
-    while True:
-        i += 1
+_ADD_TO_HISTORY_LOCK = asyncio.Lock()
 
-        try:
-            await asyncio.to_thread(add_to_history, connection, clipboard)
-            break
-        except Exception:
-            await asyncio.sleep(i)
+
+async def _add_to_history(connection, clipboard):
+    async with _ADD_TO_HISTORY_LOCK:
+        await asyncio.to_thread(add_to_history, connection, clipboard)
 
 
 async def _ws_handler(
