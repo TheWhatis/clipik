@@ -15,6 +15,18 @@ from .database import add_to_history
 from .functions import is_ip_allowed, supports_versions
 
 
+async def _add_to_history(connection, clipboard):
+    i = 0
+    while True:
+        i += 1
+
+        try:
+            await asyncio.to_thread(add_to_history, connection, clipboard)
+            break
+        except Exception:
+            await asyncio.sleep(i)
+
+
 async def _ws_handler(
     websocket: ServerConnection,
     container: Container,
@@ -106,7 +118,14 @@ async def _ws_handler(
                 )
 
                 logger.debug('Save clipboard to history from [{}:{}]: [{}]', hostname, clipboard.ip, clipboard.mime)
-                tasks.append(asyncio.create_task(asyncio.to_thread(add_to_history, container.db_connection, clipboard)))
+
+                tasks.append(
+                    asyncio.create_task(_add_to_history(
+                        add_to_history,
+                        container.db_connection,
+                        clipboard
+                    ))
+                )
             except Exception as e:
                 logger.error('Error listen peer [{}]: [{}]', peer, e)
     except websockets.exceptions.ConnectionClosed:
