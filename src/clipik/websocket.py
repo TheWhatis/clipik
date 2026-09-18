@@ -121,7 +121,6 @@ async def _ws_handler(
 
                 tasks.append(
                     asyncio.create_task(_add_to_history(
-                        add_to_history,
                         container.db_connection,
                         clipboard
                     ))
