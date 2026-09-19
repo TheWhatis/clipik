@@ -34,7 +34,10 @@ async def start(container: Container):
         stop = asyncio.Event()
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, stop.set)
+            try:
+                loop.add_signal_handler(sig, stop.set)
+            except NotImplementedError:
+                signal.signal(sig, lambda *_: stop.set())
 
         await trim_history(container.db_connection)
 
@@ -49,8 +52,9 @@ async def start(container: Container):
                 [ws_task, asyncio.create_task(stop.wait())],
                 return_when=asyncio.FIRST_COMPLETED,
             )
-            for t in pending:
-                t.cancel()
+
+            for task in pending:
+                task.cancel()
         finally:
             trim_task.cancel()
             ws_task.cancel()

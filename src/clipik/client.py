@@ -1,3 +1,4 @@
+import signal
 import asyncio
 from loguru import logger
 from .websocket import connect_to_server, disconnect_from_server
@@ -73,12 +74,41 @@ async def _listen_clipboard_and_broadcasting(container: Container):
 
 
 async def start(container: Container):
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, stop.set)
+        except NotImplementedError:
+            signal.signal(sig, lambda *_: stop.set())
+
+    tasks = [
+        asyncio.create_task(_discover(container), name='discover'),
+        asyncio.create_task(_listen_clipboard_and_broadcasting(container), name='listen')
+    ]
+
+    stop_task = asyncio.create_task(stop.wait(), name='stop')
+
     try:
         logger.info('Version [{}]', container.version)
 
-        await asyncio.gather(
-            _discover(container),
-            _listen_clipboard_and_broadcasting(container),
+        done, pending = await asyncio.wait(
+            [*tasks, stop_task],
+            return_when=asyncio.FIRST_COMPLETED,
         )
+
+        for task in done:
+            if task is not stop_task and task.exception():
+                raise task.exception()
     except Exception as e:
         logger.critical('Error setting up and deploy client: [{}]', e)
+    finally:
+        stop_task.cancel()
+
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.gather(stop_task, return_exceptions=True)

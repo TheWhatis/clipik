@@ -1,14 +1,15 @@
 import os
 import sys
-import argparse
+import signal
 import asyncio
+import argparse
 from loguru import logger
 from pathlib import Path
 from .container import Container
 from .config import write_fresh_config, read_config_file
 from .server import start as server_start
 from .client import start as client_start
-from .database import initialize_database
+from .database import initialize_database, close_database
 from .functions import list_contents, first_contents, last_contents, paste_clipboard
 from .model import ServerConfig, ClientConfig, Config
 from .logger import initialize_logger
@@ -268,6 +269,12 @@ def main():
     parser = _build_parser()
     args = parser.parse_args()
 
+    def _shutdown_handler(signum, frame):
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGINT, _shutdown_handler)
+    signal.signal(signal.SIGTERM, _shutdown_handler)
+
     if os.name == 'nt':
         config_path = Path(os.getenv('APPDATA', '~')) / 'clipik'
     elif sys.platform == 'darwin': # MacOS
@@ -294,44 +301,52 @@ def main():
     config_path: Path = overrides.get('config', config_path)
     config: Config = read_config_file(config_path, config, overrides)
 
-    db_connection = initialize_database(config)
+    do_log = args.command in ['server', 'client']
+    db_connection = initialize_database(
+        config,
+        args.command != 'server',
+        do_log,
+    )
 
     try:
-        container = Container(
-            command=args.command,
-            config=config,
-            db_connection=db_connection,
-            fresh_config=fresh_config,
-            fresh_config_path=fresh_config_path,
-            config_path=config_path,
-        )
-    except Exception as e:
-        initialize_logger(config)
-        logger.critical('Error [{}] container initialization', e)
-        return
+        try:
+            container = Container(
+                command=args.command,
+                config=config,
+                db_connection=db_connection,
+                fresh_config=fresh_config,
+                fresh_config_path=fresh_config_path,
+                config_path=config_path,
+            )
+        except Exception as e:
+            initialize_logger(config)
+            logger.critical('Error [{}] container initialization', e)
+            return
 
-    if args.command == 'server':
-        _main_server(container)
-        return
+        if args.command == 'server':
+            _main_server(container)
+            return
 
-    if args.command == 'client':
-        _main_client(container)
-        return
+        if args.command == 'client':
+            _main_client(container)
+            return
 
-    if args.command == 'list':
-        list_contents(container, args)
-        return
+        if args.command == 'list':
+            list_contents(container, args)
+            return
 
-    if args.command == 'first':
-        first_contents(container, args)
-        return
+        if args.command == 'first':
+            first_contents(container, args)
+            return
 
-    if args.command == 'last':
-        last_contents(container, args)
-        return
+        if args.command == 'last':
+            last_contents(container, args)
+            return
 
-    if args.command == 'paste':
-        _main_paste(container, args)
-        return
+        if args.command == 'paste':
+            _main_paste(container, args)
+            return
 
-    parser.error('Command not passed, write [server, client, list, first, last or paste], for details use --help')
+        parser.error('Command not passed, write [server, client, list, first, last or paste], for details use --help')
+    finally:
+        close_database(db_connection, do_log)

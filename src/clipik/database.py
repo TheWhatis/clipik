@@ -3,48 +3,86 @@ import hashlib
 import asyncio
 from loguru import logger
 from .model import Clipboard, Config
-
+from .exception import InitializationError
 
 _WRITE_DATABASE_LOCK = asyncio.Lock()
 
 
-def initialize_database(config: Config) -> sqlite3.Connection:
+def initialize_database(
+        config: Config,
+        immutable: bool,
+        do_log: bool
+) -> sqlite3.Connection:
+    if immutable:
+        if do_log:
+            logger.warning(
+                'Reading database in immutable (readonly): [{}]',
+                config.database
+            )
+
+        if not config.database.exists():
+            raise InitializationError(
+                f"Error while read immutable database [{config.database}]"
+            )
+
     config.database.parent.mkdir(parents=True, exist_ok=True)
+
     connection: sqlite3.Connection = sqlite3.connect(
-        config.database,
+        f"file:{config.database}?immutable=1" if immutable else config.database,
         check_same_thread=False,
+        uri=immutable,
     )
 
     connection.row_factory = sqlite3.Row
 
-    connection.execute("PRAGMA journal_mode = WAL")   # читатели не блокируют писателя
-    connection.execute("PRAGMA synchronous = NORMAL") # быстрее, безопасно в WAL
-    connection.execute("PRAGMA busy_timeout = 5000")  # ждать 5с при блокировке
-    connection.execute("PRAGMA foreign_keys = ON")    # если нужны F
+    if not immutable:
+        connection.execute("PRAGMA journal_mode = WAL")   # читатели не блокируют писателя
+        connection.execute("PRAGMA synchronous = NORMAL") # быстрее, безопасно в WAL
+        connection.execute("PRAGMA busy_timeout = 5000")  # ждать 5с при блокировке
+        connection.execute("PRAGMA foreign_keys = ON")    # если нужны F
 
-    connection.execute("""
-    CREATE TABLE IF NOT EXISTS history (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        mime       TEXT NOT NULL,
-        data       BLOB NOT NULL,
-        data_hash  BLOB NOT NULL,
-        hostname   TEXT NOT NULL,
-        ip         TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-    """)
+        connection.execute("""
+        CREATE TABLE IF NOT EXISTS history (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            mime       TEXT NOT NULL,
+            data       BLOB NOT NULL,
+            data_hash  BLOB NOT NULL,
+            hostname   TEXT NOT NULL,
+            ip         TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
 
-    connection.execute(
-        'CREATE INDEX IF NOT EXISTS idx_history_created_at ON history (created_at DESC)'
-    )
-    connection.execute(
-        'CREATE INDEX IF NOT EXISTS idx_history_hostname ON history (hostname)'
-    )
-    connection.execute(
-        'CREATE INDEX IF NOT EXISTS idx_history_data_hash ON history (data_hash);'
-    )
+        connection.execute(
+            'CREATE INDEX IF NOT EXISTS idx_history_created_at ON history (created_at DESC)'
+        )
+        connection.execute(
+            'CREATE INDEX IF NOT EXISTS idx_history_hostname ON history (hostname)'
+        )
+        connection.execute(
+            'CREATE INDEX IF NOT EXISTS idx_history_data_hash ON history (data_hash);'
+        )
 
     return connection
+
+
+def close_database(connection: sqlite3.Connection | None, do_log: bool) -> None:
+    if connection is None:
+        return
+
+    try:
+        connection.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+    except sqlite3.OperationalError as e:
+        if do_log:
+            logger.warning('Checkpoint failed [{}]', e)
+
+    try:
+        if do_log:
+            logger.info('Close database')
+
+        connection.close()
+    except Exception as e:
+        logger.critical('Close failed [{}]', e)
 
 
 def _data_hash(data: bytes) -> bytes:
