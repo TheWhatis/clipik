@@ -3,6 +3,26 @@ import signal
 from loguru import logger
 from .websocket import start_websocket_server
 from .container import Container
+from .database import trim_history
+
+
+async def _trim_history_each_seven_seconds(container: Container, interval: float = 7.0):
+    """Периодически обрезает историю до 1000 записей."""
+    while True:
+        try:
+            logger.debug('Start trim_history with limit [1000] and interval [{}]', interval)
+            await asyncio.sleep(interval)
+
+            removed = await trim_history(container.db_connection, 1000)
+
+            if removed:
+                logger.info('History trimmed: {} records removed', removed)
+        except asyncio.CancelledError:
+            # Корректная остановка по cancel()
+            raise
+        except Exception as e:
+            # Одна ошибка БД не должна убивать таску
+            logger.error('Error while trimming history: [{}]', e)
 
 
 async def start(container: Container):
@@ -16,6 +36,10 @@ async def start(container: Container):
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stop.set)
 
+        await trim_history(container.db_connection)
+
+        trim_task = asyncio.create_task(_trim_history_each_seven_seconds(container))
+
         await ready.wait()
         container.register_service(container)
 
@@ -28,6 +52,20 @@ async def start(container: Container):
             for t in pending:
                 t.cancel()
         finally:
+            trim_task.cancel()
+            ws_task.cancel()
+
+            try:
+                await trim_task
+            except asyncio.CancelledError:
+                pass
+
+            try:
+                await ws_task
+            except asyncio.CancelledError:
+                pass
+
             container.unregister_service(container)
     except Exception as e:
         logger.critical('Error setting up and deploy server: [{}]', e)
+        raise e

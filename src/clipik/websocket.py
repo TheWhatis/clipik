@@ -15,14 +15,6 @@ from .database import add_to_history
 from .functions import is_ip_allowed, supports_versions
 
 
-_ADD_TO_HISTORY_LOCK = asyncio.Lock()
-
-
-async def _add_to_history(connection, clipboard):
-    async with _ADD_TO_HISTORY_LOCK:
-        await asyncio.to_thread(add_to_history, connection, clipboard)
-
-
 async def _ws_handler(
     websocket: ServerConnection,
     container: Container,
@@ -116,7 +108,7 @@ async def _ws_handler(
                 logger.debug('Save clipboard to history from [{}:{}]: [{}]', hostname, clipboard.ip, clipboard.mime)
 
                 tasks.append(
-                    asyncio.create_task(_add_to_history(
+                    asyncio.create_task(add_to_history(
                         container.db_connection,
                         clipboard
                     ))

@@ -1,7 +1,11 @@
 import sqlite3
 import hashlib
+import asyncio
 from loguru import logger
 from .model import Clipboard, Config
+
+
+_WRITE_DATABASE_LOCK = asyncio.Lock()
 
 
 def initialize_database(config: Config) -> sqlite3.Connection:
@@ -47,7 +51,7 @@ def _data_hash(data: bytes) -> bytes:
     return hashlib.sha256(data).digest()
 
 
-def add_to_history(connection: sqlite3.Connection, content: Clipboard) -> int:
+def _add_to_history(connection: sqlite3.Connection, content: Clipboard) -> int:
     try:
         data_hash = _data_hash(content.data)
 
@@ -61,6 +65,11 @@ def add_to_history(connection: sqlite3.Connection, content: Clipboard) -> int:
     except Exception as e:
         logger.error('Error while add to history: [{}]', e)
         raise e
+
+
+async def add_to_history(connection: sqlite3.Connection, content: Clipboard) -> int:
+    async with _WRITE_DATABASE_LOCK:
+        return await asyncio.to_thread(_add_to_history, connection, content)
 
 
 def get_from_history(connection: sqlite3.Connection, id: int) -> Clipboard | None:
@@ -110,3 +119,53 @@ def get_history(
         ))
 
     return output
+
+
+def _trim_history(connection: sqlite3.Connection, max_records: int = 1000) -> int:
+    """
+    Обрезает историю до max_records самых свежих записей.
+
+    Возвращает количество удалённых записей (0, если чистить нечего).
+
+    Логика:
+      1. Быстро проверяем COUNT(*) — если записей <= лимита, выходим.
+      2. Находим id «пороговой» записи — ровно max_records-й сверху
+         (OFFSET max_records - 1 от начала DESC-сортировки по id).
+      3. Удаляем всё, что строго старше этого id.
+    """
+    try:
+        cursor = connection.execute("SELECT COUNT(*) FROM history")
+        (count,) = cursor.fetchone()
+
+        if count <= max_records:
+            return 0
+
+        cursor = connection.execute(
+            "SELECT id FROM history ORDER BY id DESC LIMIT 1 OFFSET ?",
+            (max_records - 1,),
+        )
+
+        row = cursor.fetchone()
+
+        if row is None:
+            # Защита от гонки: между COUNT и SELECT записей стало меньше.
+            return 0
+
+        threshold_id = row["id"]
+
+        cursor = connection.execute(
+            "DELETE FROM history WHERE id < ?",
+            (threshold_id,),
+        )
+
+        connection.commit()
+
+        return cursor.rowcount or 0
+    except Exception as e:
+        logger.error("Error while trim history: [{}]", e)
+        raise e
+
+
+async def trim_history(connection: sqlite3.Connection, max_records: int = 1000) -> int:
+    async with _WRITE_DATABASE_LOCK:
+        return await asyncio.to_thread(_trim_history, connection, max_records)
