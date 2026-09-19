@@ -1,41 +1,54 @@
 import sqlite3
 import hashlib
 import asyncio
+from pathlib import Path
 from loguru import logger
 from .model import Clipboard, Config
 from .exception import InitializationError
+
 
 _WRITE_DATABASE_LOCK = asyncio.Lock()
 
 
 def initialize_database(
-        config: Config,
-        immutable: bool,
-        do_log: bool
+    config: Config,
+    readonly: bool,
+    do_log: bool
 ) -> sqlite3.Connection:
-    if immutable:
-        if do_log:
-            logger.warning(
-                'Reading database in immutable (readonly): [{}]',
-                config.database
-            )
+    uri = False
+    database_path = config.database
 
+    if readonly:
         if not config.database.exists():
             raise InitializationError(
                 f"Error while read immutable database [{config.database}]"
             )
 
+        database_path_str = str(database_path)
+        shm_path = Path(database_path_str + '-shm')
+        wal_path = Path(database_path_str + '-wal')
+
+        if not shm_path.exists() or not wal_path.exists():
+            if do_log:
+                logger.warning(
+                    'Reading database in immutable (readonly): [{}]',
+                    config.database
+                )
+
+            uri = True
+            database_path = f"file:{database_path}?immutable=1"
+
     config.database.parent.mkdir(parents=True, exist_ok=True)
 
     connection: sqlite3.Connection = sqlite3.connect(
-        f"file:{config.database}?immutable=1" if immutable else config.database,
+        database_path,
         check_same_thread=False,
-        uri=immutable,
+        uri=uri,
     )
 
     connection.row_factory = sqlite3.Row
 
-    if not immutable:
+    if not readonly:
         connection.execute("PRAGMA journal_mode = WAL")   # читатели не блокируют писателя
         connection.execute("PRAGMA synchronous = NORMAL") # быстрее, безопасно в WAL
         connection.execute("PRAGMA busy_timeout = 5000")  # ждать 5с при блокировке
