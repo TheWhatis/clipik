@@ -60,9 +60,11 @@ def _compress_all_logs_except_active(log_dir: Path, active_name: str) -> None:
             logger.error('Failed to compress [{}]: [{}]', log_file, e)
 
 
-def initialize_logger(config: Config) -> None:
+def initialize_logger(config: Config, prefix: str) -> None:
     global logger
-    config.log_dir.mkdir(parents=True, exist_ok=True)
+
+    log_dir = config.log_dir / prefix
+    log_dir.mkdir(parents=True, exist_ok=True)
 
     today = datetime.date.today().strftime('%Y-%m-%d')
     active_name = f"{today}.log"
@@ -70,11 +72,11 @@ def initialize_logger(config: Config) -> None:
     # Сначала сжимаем всё старое, потом открываем логгер.
     # Порядок важен: если делать наоборот, Loguru займёт активный
     # файл, и он попадёт в сжатие.
-    _compress_all_logs_except_active(config.log_dir, active_name)
+    _compress_all_logs_except_active(log_dir, active_name)
 
     logger.remove()
 
-    filepath = str(config.log_dir / '{time:YYYY-MM-DD}.log')
+    filepath = str(log_dir / '{time:YYYY-MM-DD}.log')
     rotator = _Rotator(size=10 * 1024 * 1024, at=datetime.time(0, 0, 0))
 
     logger.add(

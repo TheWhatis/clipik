@@ -160,8 +160,8 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _initialize_loop(container: Container):
-    initialize_logger(container.config)
+def _initialize_loop(container: Container, log_prefix: str):
+    initialize_logger(container.config, log_prefix)
 
     if container.fresh_config:
         logger.info('Config has been freshed [{}]', container.fresh_config_path)
@@ -173,7 +173,7 @@ def _initialize_loop(container: Container):
 
 
 def _main_server(container: Container):
-    _initialize_loop(container)
+    _initialize_loop(container, 'server')
 
     if sys.platform == 'android': # Android
         logger.error('Android [{}] does not supports', sys.platform)
@@ -201,7 +201,7 @@ def _main_server(container: Container):
 
 
 def _main_client(container: Container):
-    _initialize_loop(container)
+    _initialize_loop(container, 'client')
 
     logger.info('Set listen_clipboard to Container')
 
@@ -319,7 +319,7 @@ def main():
                 config_path=config_path,
             )
         except Exception as e:
-            initialize_logger(config)
+            initialize_logger(config, args.command)
             logger.critical('Error [{}] container initialization', e)
             return
 
