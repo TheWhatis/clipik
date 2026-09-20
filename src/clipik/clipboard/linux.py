@@ -1,8 +1,6 @@
 import os
-import shutil
 import asyncio
 from loguru import logger
-from pathlib import Path
 from asyncio.subprocess import Process
 from collections.abc import AsyncGenerator
 from ..model import ClipboardContent
@@ -326,11 +324,10 @@ async def _x11_pick_target(display: str) -> tuple[str, str] | None:
     return None
 
 
-async def listen_clipboard_x11(
-    display: str,
-    size_limit: int,
-) -> AsyncGenerator[ClipboardContent, None]:
+async def listen_clipboard_x11(size_limit: int) -> AsyncGenerator[ClipboardContent, None]:
     """Слушает один X-сервер через clipnotify."""
+    display = os.getenv('DISPLAY')
+
     while True:
         try:
             notify = await asyncio.create_subprocess_exec(

@@ -171,7 +171,6 @@ def _initialize_loop(container: Container, log_prefix: str):
         logger.info('Config [{}]=[{}]', key, value)
 
 
-
 def _main_server(container: Container):
     _initialize_loop(container, 'server')
 
@@ -195,9 +194,6 @@ def _main_server(container: Container):
     except KeyboardInterrupt:
         logger.info('Bye-Bye!!!')
         sys.exit(130)
-    except Exception as e:
-        logger.critical('Error while running server [{}]', e)
-        sys.exit(1)
 
 
 def _main_client(container: Container):
@@ -235,9 +231,6 @@ def _main_client(container: Container):
     except KeyboardInterrupt:
         logger.info('Bye-Bye!!!')
         sys.exit(130)
-    except Exception as e:
-        logger.critical('Error while running client [{}]', e)
-        sys.exit(1)
 
 
 def _main_paste(container: Container, args: argparse.ArgumentParser):
@@ -259,10 +252,6 @@ def _main_paste(container: Container, args: argparse.ArgumentParser):
     except KeyboardInterrupt:
         print("Bye-bye!!!", file=sys.stderr)
         sys.exit(130)
-    except Exception as e:
-        raise e
-        print(f"Error while paste clipboard [{e}]")
-        sys.exit(1)
 
 
 def main():
