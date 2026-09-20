@@ -1,10 +1,11 @@
 import json
 import socket
-from typing import TYPE_CHECKING
 import psutil
 import asyncio
 import argparse
 import ipaddress
+from pydantic import TypeAdapter
+from typing import TYPE_CHECKING
 from loguru import logger
 from packaging.version import Version
 from .model import Config, Clipboard, ClipboardContent
@@ -62,7 +63,8 @@ def list_contents(container: "Container", args: argparse.Namespace):
     history = get_history(container.db_connection, limit=args.limit)
 
     if args.format == 'json':
-        print(json.dumps(history, indent=2))
+        ta = TypeAdapter(list[Clipboard])
+        print(ta.dump_json(history, indent=2).decode())
         return
 
     if len(history) == 0:
@@ -81,7 +83,7 @@ def first_contents(container: "Container", args: argparse.Namespace):
         return
 
     if args.format == 'json':
-        print(json.dumps(history[0], indent=2))
+        print(history[0].model_dump_json(indent=2))
         return
 
     _raw_content(history[0])
@@ -95,7 +97,7 @@ def last_contents(container: "Container", args: argparse.Namespace):
         return
 
     if args.format == 'json':
-        print(json.dumps(history[0], indent=2))
+        print(history[0].model_dump_json(indent=2))
         return
 
     _raw_content(history[0])
