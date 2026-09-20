@@ -133,7 +133,7 @@ CLIPIK - сервис для реализации общего буфера об
 * Переменные окружения
   Имеются только переменные окружения, за счет которых можно менять свойства:
 
-  - ~CLIPIK_LOG_LEVEL=INFO~ - Уровель логирования: INFO, DEBUG, ERROR, CRITICAL ...
+  - ~CLIPIK_LOG_LEVEL=INFO~ - Уровень логирования: INFO, DEBUG, ERROR, CRITICAL ...
   - =WAYLAND_DISPLAY= - Если оно установлено, будет использовать wayland clipboard
   - ~CLIPIK_PORT=8765~ - На каком порту поднять websocket (передача буфера)
   - ~CLIPIK_HANDSHAKE_TIMEOUT=7~ - Сколько ждать HANDSHAKE при подключении

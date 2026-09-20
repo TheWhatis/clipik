@@ -148,7 +148,7 @@ command:
 Имеются только переменные окружения, за счет которых можно менять
 свойства:
 
-- `CLIPIK_LOG_LEVEL=INFO` - Уровель логирования: INFO, DEBUG, ERROR,
+- `CLIPIK_LOG_LEVEL=INFO` - Уровень логирования: INFO, DEBUG, ERROR,
   CRITICAL …
 - `WAYLAND_DISPLAY` - Если оно установлено, будет использовать wayland
   clipboard
